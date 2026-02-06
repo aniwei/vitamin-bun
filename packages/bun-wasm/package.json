@@ -1,0 +1,17 @@
+{
+  "name": "@aspect-build/bun-wasm",
+  "version": "0.0.1",
+  "description": "Bun WASM module loader — loads and instantiates the Bun binary compiled to wasm32-wasi",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  }
+}
