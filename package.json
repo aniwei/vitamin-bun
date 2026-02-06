@@ -9,7 +9,8 @@
     "test": "turbo run test",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
-    "bun:wasm": "cd vendor/bun && zig build -Dtarget=wasm32-wasi"
+    "bun:zig:setup": "cmake -DZIG_PATH=vendor/bun/vendor/zig -DZIG_COMMIT=c1423ff3fc7064635773a4a4616c5bf986eb00fe -P vendor/bun/cmake/scripts/DownloadZig.cmake",
+    "bun:wasm": "cd vendor/bun && ./vendor/zig/zig.exe build -Dtarget=wasm32-wasi"
   },
   "devDependencies": {
     "typescript": "^5.7.0",
@@ -19,6 +20,5 @@
   },
   "engines": {
     "node": ">=18"
-  },
-  "packageManager": "npm@10.0.0"
+  }
 }
