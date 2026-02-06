@@ -58,7 +58,7 @@ entirely in-browser without a remote server.
 
 | Layer | Package | Responsibility |
 |-------|---------|----------------|
-| **WASM Module** | `@aspect-build/bun-wasm` (external build) | Bun compiled to `wasm32-wasi` with JS engine removed. |
+| **WASM Module** | `@aspect-build/bun-wasm` | Bun compiled to `wasm32-wasi` with JS engine removed. Source lives in `vendor/bun` submodule. |
 | **Host Bindings** | `@aspect-build/wasm-host` | Implements WASI imports (`fd_read`, `fd_write`, `sock_*`, …) by delegating to browser APIs. |
 | **Virtual FS** | `@aspect-build/virtual-fs` | In-memory filesystem with layered backends (memory, IndexedDB, OPFS). |
 | **Network Proxy** | `@aspect-build/network-proxy` | Translates WASI socket calls to browser `fetch()` and `WebSocket`. |
@@ -295,7 +295,17 @@ await container.destroy()
 vitamin-bun/
 ├── docs/
 │   └── TECHNICAL_DESIGN.md        ← this document
+├── vendor/
+│   └── bun/                       ← git submodule (https://github.com/oven-sh/bun)
 ├── packages/
+│   ├── bun-wasm/                  ← WASM module loader & build helpers
+│   │   ├── src/
+│   │   │   ├── index.ts
+│   │   │   ├── loader.ts          ← fetch / compile / instantiate WASM
+│   │   │   ├── compiler.ts        ← zig build & wasm-opt CLI helpers
+│   │   │   └── types.ts
+│   │   ├── package.json
+│   │   └── tsconfig.json
 │   ├── wasm-host/                 ← WASI host imports (FS, net, JS ctx)
 │   │   ├── src/
 │   │   │   ├── index.ts
