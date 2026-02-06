@@ -45,6 +45,8 @@ export class BrowserJSContext implements JSContextBridge {
       throw new TypeError(`Handle ${fnHandle} is not a function`)
     }
     const args = argHandles.map((h) => this.deref(h))
+    // Functions are called with `undefined` as receiver. In non-strict mode
+    // this falls back to the global object; in strict mode it stays undefined.
     const result = Reflect.apply(fn as Function, undefined, args)
     return this.allocate(result)
   }

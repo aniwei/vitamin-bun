@@ -87,11 +87,15 @@ export function createWasiImports(options: {
     },
 
     clock_time_get(
-      _clockId: number,
+      clockId: number,
       _precision: bigint,
       time: number,
     ): number {
-      const now = BigInt(Math.round(performance.now() * 1_000_000))
+      // REALTIME uses wall-clock time; MONOTONIC uses high-resolution timer.
+      const now =
+        clockId === 0
+          ? BigInt(Date.now()) * 1_000_000n
+          : BigInt(Math.round(performance.now() * 1_000_000))
       writeU64(time, now)
       return WasiErrno.SUCCESS
     },

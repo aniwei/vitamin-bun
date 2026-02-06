@@ -83,7 +83,7 @@ export class HttpProxy {
     const response = await fetch(url, {
       method,
       headers,
-      body: body.byteLength > 0 ? body.buffer as ArrayBuffer : undefined,
+      body: body.byteLength > 0 ? body.slice().buffer as ArrayBuffer : undefined,
       signal: socket.abortController?.signal,
     })
 

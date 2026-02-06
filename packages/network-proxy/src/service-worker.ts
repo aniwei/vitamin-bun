@@ -92,7 +92,7 @@ async function forwardToWasm(
         body: Uint8Array | null
       }
       resolve(
-        new Response(res.body ? (res.body as Uint8Array).buffer as ArrayBuffer : null, {
+        new Response(res.body ? (res.body as Uint8Array).slice().buffer as ArrayBuffer : null, {
           status: res.status,
           headers: res.headers,
         }),

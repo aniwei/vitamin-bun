@@ -226,10 +226,7 @@ export async function createBunContainer(
   // Boot the WASM worker.
   const worker = new WasmWorker({
     wasmUrl: options.wasmUrl,
-    crossOriginIsolated:
-      typeof globalThis.crossOriginIsolated === 'boolean'
-        ? globalThis.crossOriginIsolated
-        : false,
+    crossOriginIsolated: globalThis.crossOriginIsolated ?? false,
   })
   await worker.boot(options.files ?? {})
 

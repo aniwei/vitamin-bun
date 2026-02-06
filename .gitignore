@@ -11,6 +11,7 @@ tmp
 dist
 ts-dist
 .turbo
+*.tsbuildinfo
 **/.serena
 .serena/
 /result
