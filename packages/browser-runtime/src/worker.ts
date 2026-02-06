@@ -40,7 +40,7 @@ export class WasmWorker {
       [
         `
         // Worker entry point — will be replaced with a real worker script
-        // that imports @aspect-build/wasm-host and instantiates the WASM module.
+        // that imports @vitamin-ai/wasm-host and instantiates the WASM module.
         self.onmessage = function(event) {
           const msg = event.data;
           if (msg.type === 'init') {

@@ -1,5 +1,5 @@
 {
-  "name": "@aspect-build/network-proxy",
+  "name": "@vitamin-ai/network-proxy",
   "version": "0.0.1",
   "description": "Network proxy layer translating WASI sockets to browser fetch/WebSocket",
   "type": "module",

@@ -1,5 +1,5 @@
-import { VirtualFileSystem } from '@aspect-build/virtual-fs'
-import { WasmWorker } from '@aspect-build/browser-runtime'
+import { VirtualFileSystem } from '@vitamin-ai/virtual-fs'
+import { WasmWorker } from '@vitamin-ai/browser-runtime'
 import type {
   ContainerOptions,
   ExecResult,

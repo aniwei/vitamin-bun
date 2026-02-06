@@ -1,5 +1,5 @@
 {
-  "name": "@aspect-build/browser-runtime",
+  "name": "@vitamin-ai/browser-runtime",
   "version": "0.0.1",
   "description": "Web Worker lifecycle and SharedArrayBuffer synchronous I/O bridge",
   "type": "module",
@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@aspect-build/wasm-host": "0.0.1"
+    "@vitamin-ai/wasm-host": "0.0.1"
   },
   "devDependencies": {
     "typescript": "^5.7.0",

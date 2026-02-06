@@ -1,5 +1,5 @@
 {
-  "name": "@aspect-build/virtual-fs",
+  "name": "@vitamin-ai/virtual-fs",
   "version": "0.0.1",
   "description": "In-memory virtual filesystem with WASI-compatible interface",
   "type": "module",

@@ -1,5 +1,5 @@
 {
-  "name": "@aspect-build/sdk",
+  "name": "@vitamin-ai/sdk",
   "version": "0.0.1",
   "description": "Public API for embedding Bun-in-browser containers",
   "type": "module",
@@ -11,9 +11,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@aspect-build/browser-runtime": "0.0.1",
-    "@aspect-build/virtual-fs": "0.0.1",
-    "@aspect-build/network-proxy": "0.0.1"
+    "@vitamin-ai/browser-runtime": "0.0.1",
+    "@vitamin-ai/virtual-fs": "0.0.1",
+    "@vitamin-ai/network-proxy": "0.0.1"
   },
   "devDependencies": {
     "typescript": "^5.7.0",

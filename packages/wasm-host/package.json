@@ -1,5 +1,5 @@
 {
-  "name": "@aspect-build/wasm-host",
+  "name": "@vitamin-ai/wasm-host",
   "version": "0.0.1",
   "description": "WASI host import implementations for Bun WASM runtime",
   "type": "module",
@@ -11,8 +11,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@aspect-build/virtual-fs": "0.0.1",
-    "@aspect-build/network-proxy": "0.0.1"
+    "@vitamin-ai/virtual-fs": "0.0.1",
+    "@vitamin-ai/network-proxy": "0.0.1"
   },
   "devDependencies": {
     "typescript": "^5.7.0",

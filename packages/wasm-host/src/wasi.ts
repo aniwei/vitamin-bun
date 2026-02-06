@@ -1,4 +1,4 @@
-import { VirtualFileSystem, Whence } from '@aspect-build/virtual-fs'
+import { VirtualFileSystem, Whence } from '@vitamin-ai/virtual-fs'
 import { WasiErrno, type WasiImports } from './types.js'
 
 /**

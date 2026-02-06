@@ -4,7 +4,7 @@
     "outDir": "dist",
     "rootDir": "src",
     "paths": {
-      "@aspect-build/virtual-fs": ["../virtual-fs/src/index.ts"]
+      "@vitamin-ai/virtual-fs": ["../virtual-fs/src/index.ts"]
     }
   },
   "include": ["src"],
