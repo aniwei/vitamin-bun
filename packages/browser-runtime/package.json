@@ -1,0 +1,20 @@
+{
+  "name": "@aspect-build/browser-runtime",
+  "version": "0.0.1",
+  "description": "Web Worker lifecycle and SharedArrayBuffer synchronous I/O bridge",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@aspect-build/wasm-host": "0.0.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  }
+}
