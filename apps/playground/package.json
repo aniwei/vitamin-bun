@@ -1,0 +1,24 @@
+{
+  "name": "playground",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Development playground for vitamin-bun",
+  "scripts": {
+    "dev": "bun run --watch src/index.ts",
+    "build": "bun build ./src/index.ts --outdir ./dist --target bun",
+    "start": "bun run dist/index.js",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@vitamin-bun/core": "workspace:*",
+    "@vitamin-bun/router": "workspace:*",
+    "@vitamin-bun/server": "workspace:*",
+    "@vitamin-bun/config": "workspace:*"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "bun-types": "latest",
+    "typescript": "^5.7.2"
+  }
+}
