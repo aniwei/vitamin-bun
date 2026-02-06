@@ -1,0 +1,57 @@
+{
+  "name": "@vitamin-bun/router",
+  "version": "0.0.0",
+  "description": "Router system for vitamin-bun",
+  "keywords": [
+    "vitamin-bun",
+    "bun",
+    "router",
+    "routing"
+  ],
+  "homepage": "https://github.com/aniwei/vitamin-bun/tree/main/packages/router#readme",
+  "bugs": {
+    "url": "https://github.com/aniwei/vitamin-bun/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aniwei/vitamin-bun.git",
+    "directory": "packages/router"
+  },
+  "license": "MIT",
+  "author": "aniwei",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/types/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/types/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "bun build ./src/index.ts --outdir ./dist --target bun --sourcemap=external && tsc --emitDeclarationOnly",
+    "clean": "rm -rf dist",
+    "dev": "bun run --watch src/index.ts",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@vitamin-bun/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "bun-types": "latest",
+    "typescript": "^5.7.2"
+  },
+  "peerDependencies": {
+    "bun-types": "latest"
+  },
+  "engines": {
+    "bun": ">=1.0.0"
+  }
+}
