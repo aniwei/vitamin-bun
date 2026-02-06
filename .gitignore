@@ -11,6 +11,7 @@ tmp
 dist
 ts-dist
 .turbo
+*.tsbuildinfo
 **/.serena
 .serena/
 /result
@@ -24,3 +25,4 @@ target
 # Local dev files
 opencode-dev
 logs/
+package-lock.json

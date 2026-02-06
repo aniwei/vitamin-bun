@@ -1,0 +1,23 @@
+{
+  "name": "vitamin-bun",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "turbo": "^2.4.0",
+    "vitest": "^3.0.0",
+    "prettier": "^3.4.0"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "packageManager": "npm@10.0.0"
+}

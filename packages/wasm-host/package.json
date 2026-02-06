@@ -1,0 +1,21 @@
+{
+  "name": "@aspect-build/wasm-host",
+  "version": "0.0.1",
+  "description": "WASI host import implementations for Bun WASM runtime",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@aspect-build/virtual-fs": "0.0.1",
+    "@aspect-build/network-proxy": "0.0.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src",
+    "paths": {
+      "@aspect-build/virtual-fs": ["../virtual-fs/src/index.ts"]
+    }
+  },
+  "include": ["src"],
+  "references": [
+    { "path": "../virtual-fs" }
+  ]
+}
