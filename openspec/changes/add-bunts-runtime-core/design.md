@@ -12,7 +12,7 @@ SDK.exec('bun', ['run', '/index.ts'])
   -> RuntimeCore.execute(entry)
      -> Transpiler.compile(source, loader)
      -> ModuleLoader.load(entry)
-     -> RuntimePolyfill.inject()
+     -> BunRuntime.inject()
      -> Evaluator.run(moduleGraph)
 ```
 

@@ -1,12 +1,12 @@
 import { describe, it, expect } from 'vitest'
 import { VirtualFileSystem } from '../../../virtual-fs/src/index'
-import { createPolyfill } from '../polyfill'
-import { createCoreModules } from '../core-modules'
+import { createBunRuntime } from '../bun-runtime'
+import { createCoreModules } from '../core-modules/index'
 import { ModuleLoader } from '../module-loader'
 import { Transpiler } from '../transpiler'
 
 function createLoader(vfs: VirtualFileSystem) {
-  const polyfill = createPolyfill(vfs, {}, () => {}, () => {})
+  const polyfill = createBunRuntime(vfs, {}, () => {}, () => {})
   const coreModules = createCoreModules(vfs, polyfill)
 
   return new ModuleLoader({
@@ -18,9 +18,9 @@ function createLoader(vfs: VirtualFileSystem) {
 }
 
 describe('worker_threads module', () => {
-  it('exposes stubs and rejects Worker construction', () => {
+  it('exposes Worker and environment flags', () => {
     const vfs = new VirtualFileSystem()
-    const polyfill = createPolyfill(vfs, {}, () => {}, () => {})
+    const polyfill = createBunRuntime(vfs, {}, () => {}, () => {})
     const core = createCoreModules(vfs, polyfill)
 
     const workerThreads = core.worker_threads as {
@@ -35,7 +35,11 @@ describe('worker_threads module', () => {
     expect(workerThreads.threadId).toBe(0)
     expect(workerThreads.parentPort).toBeNull()
     expect(workerThreads.workerData).toBeNull()
-    expect(() => new workerThreads.Worker()).toThrow(/worker_threads is not supported/i)
+    expect(workerThreads.Worker).toBeTypeOf('function')
+
+    if (typeof (globalThis as { Worker?: unknown }).Worker === 'undefined') {
+      expect(() => new workerThreads.Worker()).toThrow(/WebWorker support/i)
+    }
   })
 
   it('resolves node:worker_threads alias', async () => {

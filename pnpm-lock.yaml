@@ -8,6 +8,9 @@ importers:
 
   .:
     devDependencies:
+      fflate:
+        specifier: ^0.8.2
+        version: 0.8.2
       prettier:
         specifier: ^3.4.0
         version: 3.8.1
@@ -48,6 +51,9 @@ importers:
 
   packages/browser-runtime:
     dependencies:
+      '@vitamin-ai/bunts-runtime':
+        specifier: workspace:*
+        version: link:../bunts-runtime
       '@vitamin-ai/wasm-host':
         specifier: workspace:*
         version: link:../wasm-host
@@ -55,6 +61,22 @@ importers:
       typescript:
         specifier: ^5.7.0
         version: 5.9.3
+      vitest:
+        specifier: ^3.0.0
+        version: 3.2.4
+
+  packages/bunts-runtime:
+    dependencies:
+      '@vitamin-ai/virtual-fs':
+        specifier: workspace:*
+        version: link:../virtual-fs
+      fflate:
+        specifier: ^0.8.2
+        version: 0.8.2
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+    devDependencies:
       vitest:
         specifier: ^3.0.0
         version: 3.2.4
@@ -659,6 +681,9 @@ packages:
     peerDependenciesMeta:
       picomatch:
         optional: true
+
+  fflate@0.8.2:
+    resolution: {integrity: sha512-cPJU47OaAoCbg0pBvzsgpTPhmhqI5eJjh/JIu8tPj5q+T7iLvW/JAYUqmE7KOB4R1ZyEhzBaIQpQpardBF5z8A==}
 
   fsevents@2.3.3:
     resolution: {integrity: sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==}
@@ -1280,6 +1305,8 @@ snapshots:
   fdir@6.5.0(picomatch@4.0.3):
     optionalDependencies:
       picomatch: 4.0.3
+
+  fflate@0.8.2: {}
 
   fsevents@2.3.3:
     optional: true

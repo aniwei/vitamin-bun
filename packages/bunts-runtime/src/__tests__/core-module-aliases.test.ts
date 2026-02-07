@@ -2,11 +2,11 @@ import { describe, it, expect } from 'vitest'
 import { VirtualFileSystem } from '../../../virtual-fs/src/index'
 import { ModuleLoader } from '../module-loader'
 import { Transpiler } from '../transpiler'
-import { createPolyfill } from '../polyfill'
-import { createCoreModules } from '../core-modules'
+import { createBunRuntime } from '../bun-runtime'
+import { createCoreModules } from '../core-modules/index'
 
 function createLoader(vfs: VirtualFileSystem) {
-  const polyfill = createPolyfill(vfs, {}, () => {}, () => {})
+  const polyfill = createBunRuntime(vfs, {}, () => {}, () => {})
   const coreModules = createCoreModules(vfs, polyfill)
 
   return new ModuleLoader({

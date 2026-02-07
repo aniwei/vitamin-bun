@@ -7,6 +7,7 @@ import type {
   SpawnedProcess,
   ContainerFS,
   BunContainer,
+  VfsSnapshot,
 } from './types.js'
 
 // ---------------------------------------------------------------------------
@@ -92,6 +93,18 @@ class BunContainerImpl implements BunContainer {
       },
       exists: async (path: string): Promise<boolean> => {
         return this.vfs.exists(path)
+      },
+      save: async (): Promise<VfsSnapshot> => {
+        const snapshot = (await this.worker.dumpVfs()) as VfsSnapshot
+        return snapshot
+      },
+      restore: async (snapshot: VfsSnapshot): Promise<void> => {
+        await this.worker.restoreVfs(snapshot)
+        for (const [path, encoded] of Object.entries(snapshot.files)) {
+          const bytes = base64ToBytes(encoded)
+          this.vfs.writeFile(path, bytes)
+          this.worker.writeFile(path, bytes)
+        }
       },
     }
   }
@@ -244,6 +257,7 @@ export async function createBunContainer(
     try {
       await navigator.serviceWorker.register(options.serviceWorkerUrl, {
         scope: '/',
+        type: 'module',
       })
       await navigator.serviceWorker.ready
     } catch {
@@ -261,6 +275,15 @@ export async function createBunContainer(
   })
   await worker.boot(options.files ?? {})
 
+  if (options.onServeStart) {
+    worker.on('serve:register', (msg) => {
+      if (msg.type !== 'serve:register') return
+      const origin = typeof location !== 'undefined' ? location.origin : 'http://localhost'
+      const url = `${origin}/@/vitamin_serve__${msg.port}`
+      options.onServeStart?.(url)
+    })
+  }
+
   return new BunContainerImpl(worker, vfs, httpProxy, wsProxy)
 }
 
@@ -277,4 +300,13 @@ function concat(buffers: Uint8Array[]): Uint8Array {
     offset += buf.byteLength
   }
   return result
+}
+
+function base64ToBytes(encoded: string): Uint8Array {
+  const binary = atob(encoded)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i)
+  }
+  return bytes
 }

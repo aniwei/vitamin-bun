@@ -1,12 +1,12 @@
 import { describe, it, expect } from 'vitest'
 import { VirtualFileSystem } from '../../../virtual-fs/src/index'
-import { createPolyfill } from '../polyfill'
-import { createCoreModules } from '../core-modules'
+import { createBunRuntime } from '../bun-runtime'
+import { createCoreModules } from '../core-modules/index'
 import { ModuleLoader } from '../module-loader'
 import { Transpiler } from '../transpiler'
 
 function createLoader(vfs: VirtualFileSystem) {
-  const polyfill = createPolyfill(vfs, {}, () => {}, () => {})
+  const polyfill = createBunRuntime(vfs, {}, () => {}, () => {})
   const coreModules = createCoreModules(vfs, polyfill)
 
   return new ModuleLoader({
@@ -20,7 +20,7 @@ function createLoader(vfs: VirtualFileSystem) {
 describe('inspector module', () => {
   it('url returns null', () => {
     const vfs = new VirtualFileSystem()
-    const polyfill = createPolyfill(vfs, {}, () => {}, () => {})
+    const polyfill = createBunRuntime(vfs, {}, () => {}, () => {})
     const core = createCoreModules(vfs, polyfill)
 
     const inspector = core.inspector as { url: () => null }

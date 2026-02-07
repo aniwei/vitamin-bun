@@ -1,42 +1,42 @@
 import type { VirtualFileSystem } from '@vitamin-ai/virtual-fs'
-import type { RuntimePolyfill } from './polyfill'
-import type { RuntimeCore } from './runtime-core'
-import { createAssertModule } from './core-modules/assert'
-import { createAssertStrictModule } from './core-modules/assert-strict'
-import { createAsyncHooksModule } from './core-modules/async-hooks'
-import { createBufferModule } from './core-modules/buffer'
-import { createConstantsModule } from './core-modules/constants'
-import { createCryptoModule } from './core-modules/crypto'
-import { createDiagnosticsChannelModule } from './core-modules/diagnostics-channel'
-import { createEventsModule } from './core-modules/events'
-import { createFsModule, createFsPromisesModule } from './core-modules/fs'
-import { createHttpModule } from './core-modules/http'
-import { createInspectorModule } from './core-modules/inspector'
-import { createModuleModule } from './core-modules/module'
-import { createNetModule } from './core-modules/net'
-import { createOsModule } from './core-modules/os'
-import { createPathModule } from './core-modules/path'
-import { createPerfHooksModule } from './core-modules/perf-hooks'
-import { createPunycodeModule } from './core-modules/punycode'
-import { createQuerystringModule } from './core-modules/querystring'
-import { createSchedulerModule } from './core-modules/scheduler'
-import { createStreamModule } from './core-modules/stream'
-import { createStreamPromisesModule } from './core-modules/stream-promises'
-import { createStreamWebModule } from './core-modules/stream-web'
-import { createStringDecoderModule } from './core-modules/string-decoder'
-import { createTimersModule, createTimersPromisesModule } from './core-modules/timers'
-import { createTlsModule } from './core-modules/tls'
-import { createTtyModule } from './core-modules/tty'
-import { createUrlModule } from './core-modules/url'
-import { createUtilModule } from './core-modules/util'
-import { createWorkerThreadsModule } from './core-modules/worker-threads'
-import { createZlibModule } from './core-modules/zlib'
+import type { BunRuntime } from '../bun-runtime'
+import type { RuntimeCore } from '../runtime-core'
+import { createAssertModule } from './assert'
+import { createAssertStrictModule } from './assert-strict'
+import { createAsyncHooksModule } from './async-hooks'
+import { createBufferModule } from './buffer'
+import { createConstantsModule } from './constants'
+import { createCryptoModule } from './crypto'
+import { createDiagnosticsChannelModule } from './diagnostics-channel'
+import { createEventsModule } from './events'
+import { createFsModule, createFsPromisesModule } from './fs'
+import { createHttpModule } from './http'
+import { createInspectorModule } from './inspector'
+import { createModuleModule } from './module'
+import { createNetModule } from './net'
+import { createOsModule } from './os'
+import { createPathModule } from './path'
+import { createPerfHooksModule } from './perf-hooks'
+import { createPunycodeModule } from './punycode'
+import { createQuerystringModule } from './querystring'
+import { createSchedulerModule } from './scheduler'
+import { createStreamModule } from './stream'
+import { createStreamPromisesModule } from './stream-promises'
+import { createStreamWebModule } from './stream-web'
+import { createStringDecoderModule } from './string-decoder'
+import { createTimersModule, createTimersPromisesModule } from './timers'
+import { createTlsModule } from './tls'
+import { createTtyModule } from './tty'
+import { createUrlModule } from './url'
+import { createUtilModule } from './util'
+import { createWorkerThreadsModule } from './worker-threads'
+import { createZlibModule } from './zlib'
 
 export type CoreModuleMap = Record<string, unknown>
 
 export function createCoreModules(
   vfs: VirtualFileSystem,
-  runtime: RuntimePolyfill,
+  runtime: BunRuntime,
   runtimeCore?: RuntimeCore,
 ): CoreModuleMap {
   const fs = createFsModule(vfs)
@@ -65,8 +65,8 @@ export function createCoreModules(
   const punycode = createPunycodeModule()
   const assertStrict = createAssertStrictModule(assert)
   const diagnosticsChannel = createDiagnosticsChannelModule()
-  const http = createHttpModule()
-  const https = createHttpModule()
+  const http = createHttpModule(runtime, 'http:')
+  const https = createHttpModule(runtime, 'https:')
   const net = createNetModule()
   const tls = createTlsModule()
   const zlib = createZlibModule()

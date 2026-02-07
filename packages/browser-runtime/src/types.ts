@@ -6,6 +6,9 @@
 export type WorkerInMessage =
   | { type: 'init'; wasmBytes?: ArrayBuffer; files: Record<string, string>; env?: Record<string, string>; sab?: SharedArrayBuffer }
   | { type: 'exec'; command: string; args: string[]; id: number }
+  | { type: 'serve:request'; requestId: number; method: string; url: string; headers: Record<string, string>; body: Uint8Array | null }
+  | { type: 'vfs:dump'; id: number }
+  | { type: 'vfs:restore'; id: number; snapshot: VfsSnapshot }
   | { type: 'fs:write'; path: string; content: string | Uint8Array }
   | { type: 'fs:mkdir'; path: string }
   | { type: 'fs:unlink'; path: string }
@@ -19,6 +22,19 @@ export type WorkerOutMessage =
   | { type: 'stderr'; data: Uint8Array }
   | { type: 'exit'; id: number; code: number }
   | { type: 'error'; message: string }
+  | { type: 'serve:register'; port: number }
+  | { type: 'serve:unregister'; port: number }
+  | { type: 'serve:response'; requestId: number; status: number; headers: Record<string, string>; body: Uint8Array | null; stream: boolean }
+  | { type: 'serve:chunk'; requestId: number; chunk: Uint8Array }
+  | { type: 'serve:end'; requestId: number }
+  | { type: 'serve:error'; requestId: number; message: string }
+  | { type: 'vfs:dump:result'; id: number; snapshot: VfsSnapshot }
+  | { type: 'vfs:restore:result'; id: number }
+
+export type VfsSnapshot = {
+  files: Record<string, string>
+  encoding: 'base64'
+}
 
 /**
  * SharedArrayBuffer layout for synchronous I/O bridging.

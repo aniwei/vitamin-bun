@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { VirtualFileSystem } from '../../../virtual-fs/src/index'
-import { createPolyfill } from '../polyfill'
-import { createCoreModules } from '../core-modules'
+import { createBunRuntime } from '../bun-runtime'
+import { createCoreModules } from '../core-modules/index'
 import { ModuleLoader } from '../module-loader'
 import { Transpiler } from '../transpiler'
 
@@ -12,7 +12,7 @@ afterEach(() => {
 })
 
 function createLoader(vfs: VirtualFileSystem) {
-  const polyfill = createPolyfill(vfs, {}, () => {}, () => {})
+  const polyfill = createBunRuntime(vfs, {}, () => {}, () => {})
   const coreModules = createCoreModules(vfs, polyfill)
 
   return new ModuleLoader({
@@ -28,7 +28,7 @@ describe('http/https modules', () => {
     globalThis.fetch = vi.fn(async () => new Response('ok', { status: 200, headers: { 'x-test': '1' } }))
 
     const vfs = new VirtualFileSystem()
-    const polyfill = createPolyfill(vfs, {}, () => {}, () => {})
+    const polyfill = createBunRuntime(vfs, {}, () => {}, () => {})
     const core = createCoreModules(vfs, polyfill)
 
     const http = core.http as { get: (url: string, cb: (res: { statusCode: number; text: () => Promise<string> }) => void) => void }

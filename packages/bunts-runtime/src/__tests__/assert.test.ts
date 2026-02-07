@@ -1,12 +1,12 @@
 import { describe, it, expect } from 'vitest'
 import { VirtualFileSystem } from '../../../virtual-fs/src/index'
-import { createPolyfill } from '../polyfill'
-import { createCoreModules } from '../core-modules'
+import { createBunRuntime } from '../bun-runtime'
+import { createCoreModules } from '../core-modules/index'
 import { ModuleLoader } from '../module-loader'
 import { Transpiler } from '../transpiler'
 
 function createLoader(vfs: VirtualFileSystem) {
-  const polyfill = createPolyfill(vfs, {}, () => {}, () => {})
+  const polyfill = createBunRuntime(vfs, {}, () => {}, () => {})
   const coreModules = createCoreModules(vfs, polyfill)
 
   return new ModuleLoader({
@@ -20,7 +20,7 @@ function createLoader(vfs: VirtualFileSystem) {
 describe('assert module', () => {
   it('ok/strictEqual/notStrictEqual works', () => {
     const vfs = new VirtualFileSystem()
-    const polyfill = createPolyfill(vfs, {}, () => {}, () => {})
+    const polyfill = createBunRuntime(vfs, {}, () => {}, () => {})
     const core = createCoreModules(vfs, polyfill)
 
     const assert = core.assert as {
@@ -36,7 +36,7 @@ describe('assert module', () => {
 
   it('throws matches errors', () => {
     const vfs = new VirtualFileSystem()
-    const polyfill = createPolyfill(vfs, {}, () => {}, () => {})
+    const polyfill = createBunRuntime(vfs, {}, () => {}, () => {})
     const core = createCoreModules(vfs, polyfill)
 
     const assert = core.assert as { throws: (fn: () => void, error?: RegExp) => void }
@@ -47,7 +47,7 @@ describe('assert module', () => {
 
   it('rejects matches errors', async () => {
     const vfs = new VirtualFileSystem()
-    const polyfill = createPolyfill(vfs, {}, () => {}, () => {})
+    const polyfill = createBunRuntime(vfs, {}, () => {}, () => {})
     const core = createCoreModules(vfs, polyfill)
 
     const assert = core.assert as { rejects: (promise: Promise<unknown>, error?: RegExp) => Promise<void> }

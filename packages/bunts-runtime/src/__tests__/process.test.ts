@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import { VirtualFileSystem } from '../../../virtual-fs/src/index'
-import { createPolyfill } from '../polyfill'
+import { createBunRuntime } from '../bun-runtime'
 
 describe('process module', () => {
   it('exposes platform/arch/version/versions', () => {
     const vfs = new VirtualFileSystem()
-    const polyfill = createPolyfill(vfs, {}, () => {}, () => {})
+    const polyfill = createBunRuntime(vfs, {}, () => {}, () => {})
 
     expect(polyfill.process.platform).toBe('browser')
     expect(polyfill.process.arch).toBe('wasm')

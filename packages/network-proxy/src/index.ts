@@ -1,9 +1,9 @@
-export { HttpProxy } from './http-proxy.js'
-export { WebSocketProxy } from './websocket-proxy.js'
+export { HttpProxy } from './http-proxy'
+export { WebSocketProxy } from './websocket-proxy'
 export {
   type SocketDescriptor,
   type NetworkProxyOptions,
   AddressFamily,
   SocketType,
   SocketState,
-} from './types.js'
+} from './types'

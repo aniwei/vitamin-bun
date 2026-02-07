@@ -51,18 +51,24 @@ self.addEventListener('fetch', (event: Event) => {
   const fetchEvent = event as FetchEvent
   const url = new URL(fetchEvent.request.url)
 
-  // Only intercept localhost requests whose port has been registered.
-  if (url.hostname !== 'localhost' && url.hostname !== '127.0.0.1') {
+  const magicMatch = matchServePath(url.pathname)
+  const port = magicMatch?.port ?? (parseInt(url.port, 10) || 80)
+
+  // Only intercept localhost requests (legacy) or magic serve paths.
+  if (!magicMatch && url.hostname !== 'localhost' && url.hostname !== '127.0.0.1') {
     return
   }
 
-  const port = parseInt(url.port, 10) || 80
   const messagePort = portMap.get(port)
   if (!messagePort) {
     return // Not a virtual server — let the browser handle it.
   }
 
-  fetchEvent.respondWith(forwardToWasm(fetchEvent.request, messagePort))
+  const targetUrl = magicMatch
+    ? rewriteServeUrl(url, magicMatch.port, magicMatch.rest)
+    : url.toString()
+
+  fetchEvent.respondWith(forwardToWasm(fetchEvent.request, messagePort, targetUrl))
 })
 
 /**
@@ -72,6 +78,7 @@ self.addEventListener('fetch', (event: Event) => {
 async function forwardToWasm(
   request: Request,
   port: MessagePort,
+  targetUrl: string,
 ): Promise<Response> {
   const body = request.body
     ? new Uint8Array(await request.arrayBuffer())
@@ -85,24 +92,56 @@ async function forwardToWasm(
   return new Promise<Response>((resolve) => {
     const channel = new MessageChannel()
 
+    let streamController: ReadableStreamDefaultController<Uint8Array> | null = null
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        streamController = controller
+      },
+    })
+
     channel.port1.onmessage = (event: MessageEvent) => {
-      const res = event.data as {
-        status: number
-        headers: Record<string, string>
-        body: Uint8Array | null
+      const res = event.data as
+        | { type: 'serve:response'; status: number; headers: Record<string, string>; body: Uint8Array | null; stream: boolean }
+        | { type: 'serve:chunk'; chunk: Uint8Array }
+        | { type: 'serve:end' }
+        | { type: 'serve:error'; message: string }
+
+      if (res.type === 'serve:response') {
+        if (res.stream) {
+          resolve(new Response(stream, { status: res.status, headers: res.headers }))
+          return
+        }
+        resolve(
+          new Response(res.body ? (res.body as Uint8Array).slice().buffer as ArrayBuffer : null, {
+            status: res.status,
+            headers: res.headers,
+          }),
+        )
+        return
       }
-      resolve(
-        new Response(res.body ? (res.body as Uint8Array).slice().buffer as ArrayBuffer : null, {
-          status: res.status,
-          headers: res.headers,
-        }),
-      )
+
+      if (res.type === 'serve:chunk' && streamController) {
+        streamController.enqueue(res.chunk)
+        return
+      }
+
+      if (res.type === 'serve:end' && streamController) {
+        streamController.close()
+        return
+      }
+
+      if (res.type === 'serve:error' && streamController) {
+        streamController.error(new Error(res.message))
+      }
     }
+
+    channel.port1.start()
 
     port.postMessage(
       {
+        type: 'serve:request',
         method: request.method,
-        url: request.url,
+        url: targetUrl,
         headers,
         body,
         responsePort: channel.port2,
@@ -110,4 +149,23 @@ async function forwardToWasm(
       [channel.port2],
     )
   })
+}
+
+function matchServePath(pathname: string): { port: number; rest: string } | null {
+  const prefix = '/@/vitamin_serve__'
+  if (!pathname.startsWith(prefix)) return null
+  const suffix = pathname.slice(prefix.length)
+  const [portText, ...rest] = suffix.split('/')
+  const port = Number(portText)
+  if (!Number.isFinite(port)) return null
+  const restPath = rest.length > 0 ? `/${rest.join('/')}` : '/'
+  return { port, rest: restPath }
+}
+
+function rewriteServeUrl(original: URL, port: number, restPath: string): string {
+  const target = new URL(original.toString())
+  target.hostname = 'localhost'
+  target.port = String(port)
+  target.pathname = restPath
+  return target.toString()
 }

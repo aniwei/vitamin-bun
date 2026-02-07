@@ -18,7 +18,7 @@ async function main() {
     allowedHosts: ['api.github.com', 'httpbin.org'],
 
     // Register the Service Worker to intercept localhost requests
-    serviceWorkerUrl: '/sw.js',
+    serviceWorkerUrl: new URL('../service-worker.ts', import.meta.url).toString(),
 
     env: {
       NODE_ENV: 'production',

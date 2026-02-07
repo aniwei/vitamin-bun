@@ -1,6 +1,6 @@
 import type { VirtualFileSystem } from '@vitamin-ai/virtual-fs'
-import { createPolyfill, type RuntimeEnv } from './polyfill'
-import { createCoreModules } from './core-modules'
+import { createBunRuntime, type RuntimeEnv, type BunRuntimeHooks } from './bun-runtime'
+import { createCoreModules } from './core-modules/index'
 import { Transpiler } from './transpiler'
 import { ModuleLoader } from './module-loader'
 
@@ -9,17 +9,18 @@ export interface EvaluatorOptions {
   env?: RuntimeEnv
   onStdout?: (data: Uint8Array) => void
   onStderr?: (data: Uint8Array) => void
+  runtimeHooks?: BunRuntimeHooks
 }
 
 export class Evaluator {
   private loader: ModuleLoader
-  private polyfill: ReturnType<typeof createPolyfill>
+  private polyfill: ReturnType<typeof createBunRuntime>
 
   constructor(options: EvaluatorOptions) {
     const stdout = options.onStdout ?? (() => {})
     const stderr = options.onStderr ?? (() => {})
 
-    this.polyfill = createPolyfill(options.vfs, options.env ?? {}, stdout, stderr)
+    this.polyfill = createBunRuntime(options.vfs, options.env ?? {}, stdout, stderr, options.runtimeHooks)
     const coreModules = createCoreModules(options.vfs, this.polyfill)
     this.loader = new ModuleLoader({
       vfs: options.vfs,
@@ -42,7 +43,7 @@ export class Evaluator {
     return this.loader
   }
 
-  get runtime(): ReturnType<typeof createPolyfill> {
+  get runtime(): ReturnType<typeof createBunRuntime> {
     return this.polyfill
   }
 }

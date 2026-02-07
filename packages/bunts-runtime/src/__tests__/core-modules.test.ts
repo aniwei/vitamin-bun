@@ -1,12 +1,12 @@
 import { describe, it, expect } from 'vitest'
 import { VirtualFileSystem } from '../../../virtual-fs/src/index'
-import { createPolyfill } from '../polyfill'
-import { createCoreModules } from '../core-modules'
+import { createBunRuntime } from '../bun-runtime'
+import { createCoreModules } from '../core-modules/index'
 
 describe('Core Modules', () => {
   it('path.join works', () => {
     const vfs = new VirtualFileSystem()
-    const polyfill = createPolyfill(vfs, {}, () => {}, () => {})
+    const polyfill = createBunRuntime(vfs, {}, () => {}, () => {})
     const core = createCoreModules(vfs, polyfill)
 
     const path = core.path as { join: (...parts: string[]) => string }
@@ -17,7 +17,7 @@ describe('Core Modules', () => {
     const vfs = new VirtualFileSystem()
     vfs.writeFile('/data.txt', 'hello')
 
-    const polyfill = createPolyfill(vfs, {}, () => {}, () => {})
+    const polyfill = createBunRuntime(vfs, {}, () => {}, () => {})
     const core = createCoreModules(vfs, polyfill)
 
     const fs = core.fs as { readFileSync: (path: string, encoding?: string) => string | Uint8Array }
@@ -27,7 +27,7 @@ describe('Core Modules', () => {
 
   it('buffer.from creates Uint8Array', () => {
     const vfs = new VirtualFileSystem()
-    const polyfill = createPolyfill(vfs, {}, () => {}, () => {})
+    const polyfill = createBunRuntime(vfs, {}, () => {}, () => {})
     const core = createCoreModules(vfs, polyfill)
 
     const buffer = core.buffer as { Buffer: { from: (data: string) => Uint8Array } }

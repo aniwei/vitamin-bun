@@ -1,8 +1,9 @@
-import type { VirtualFileSystem } from '@vitamin-ai/virtual-fs'
 import { Evaluator } from './evaluator'
-import { createCoreModules } from './core-modules'
+import { createCoreModules } from './core-modules/index'
+import { bunInstall } from './bun-install'
 import { Transpiler } from './transpiler'
 import { ModuleLoader } from './module-loader'
+import type { VirtualFileSystem } from '@vitamin-ai/virtual-fs'
 import type { ModuleRecord } from './module-loader'
 
 export interface RuntimeCoreOptions {
@@ -10,6 +11,8 @@ export interface RuntimeCoreOptions {
   env?: Record<string, string>
   onStdout?: (data: Uint8Array) => void
   onStderr?: (data: Uint8Array) => void
+  onServeRegister?: (port: number) => void
+  onServeUnregister?: (port: number) => void
 }
 
 export class RuntimeCore {
@@ -30,6 +33,10 @@ export class RuntimeCore {
       },
       onStdout: stdout,
       onStderr: stderr,
+      runtimeHooks: {
+        onServeRegister: options.onServeRegister,
+        onServeUnregister: options.onServeUnregister,
+      },
     })
     this.evaluator = evaluator
     const coreModules = createCoreModules(options.vfs, evaluator.runtime, this)
@@ -47,6 +54,20 @@ export class RuntimeCore {
 
   async exec(command: string, args: string[]): Promise<number> {
     try {
+      if (command === 'bun' && args[0] === 'install') {
+        this.evaluator.runtime.process.argv = ['bun', 'install', ...args.slice(1)]
+        const registryUrl =
+          this.options.env?.BUN_INSTALL_REGISTRY ??
+          this.options.env?.NPM_CONFIG_REGISTRY
+        await bunInstall({
+          vfs: this.options.vfs,
+          cwd: this.evaluator.runtime.process.cwd(),
+          registryUrl,
+          stdout: (message) => this.evaluator.runtime.process.stdout.write(message),
+          stderr: (message) => this.evaluator.runtime.process.stderr.write(message),
+        })
+        return 0
+      }
       const entry = this.resolveEntry(command, args)
       this.evaluator.runtime.process.argv = ['bun', 'run', entry]
       await this.evaluator.run(entry)
@@ -68,6 +89,10 @@ export class RuntimeCore {
 
   loadSync(entry: string, parent?: string): ModuleRecord {
     return this.loader.loadSync(entry, parent)
+  }
+
+  async dispatchServeRequest(request: Request): Promise<Response> {
+    return await this.evaluator.runtime.Bun.__dispatchServeRequest(request)
   }
 
   private resolveEntry(command: string, args: string[]): string {

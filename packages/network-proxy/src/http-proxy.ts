@@ -4,7 +4,7 @@ import {
   AddressFamily,
   SocketType,
   SocketState,
-} from './types.js'
+} from './types'
 
 /**
  * HTTP proxy that translates raw socket-level send/recv into browser

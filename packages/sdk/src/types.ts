@@ -2,7 +2,7 @@
  * Type definitions for the public SDK.
  */
 
-import type { Readable } from './container.js'
+import type { Readable } from './container'
 
 /** Options passed to `createBunContainer()`. */
 export interface ContainerOptions {
@@ -32,6 +32,8 @@ export interface ContainerOptions {
   persistence?: 'memory' | 'indexeddb' | 'opfs'
   /** Environment variables available to the Bun process. */
   env?: Record<string, string>
+  /** Callback when a Bun.serve server starts. */
+  onServeStart?: (url: string) => void
   /**
    * Hostnames that the container is allowed to make network requests to.
    * If omitted, all hosts are allowed.
@@ -73,6 +75,13 @@ export interface ContainerFS {
   readdir(path: string): Promise<string[]>
   unlink(path: string): Promise<void>
   exists(path: string): Promise<boolean>
+  save(): Promise<VfsSnapshot>
+  restore(snapshot: VfsSnapshot): Promise<void>
+}
+
+export interface VfsSnapshot {
+  files: Record<string, string>
+  encoding: 'base64'
 }
 
 /** The main BunContainer interface. */

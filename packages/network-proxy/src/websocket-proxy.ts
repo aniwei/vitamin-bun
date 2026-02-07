@@ -3,7 +3,7 @@ import {
   SocketState,
   AddressFamily,
   SocketType,
-} from './types.js'
+} from './types'
 
 /**
  * WebSocket proxy for long-lived bidirectional connections.

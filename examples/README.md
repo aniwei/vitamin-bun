@@ -12,6 +12,12 @@ Vitamin Bun 使用示例合集，从入门到进阶。
 | 04 | [Code Editor](./04-code-editor/) | 浏览器内代码编辑器 Playground（带完整 UI） | `createBunContainer`, `fs.writeFile`, `exec` |
 | 05 | [Network Sandbox](./05-network-sandbox/) | 网络代理沙箱、`allowedHosts` 策略、Service Worker 拦截 | `allowedHosts`, `serviceWorkerUrl`, `spawn` |
 | 06 | [Low-Level API](./06-low-level-api/) | 直接使用 `@vitamin-ai/wasm-host`：WASI shim、WASM 加载、JS Bridge | `WasmHost`, `WasiShim`, `JSContextBridge` |
+| 07 | [Bun.serve Basic](./07-bun-serve-basic/) | 最小化 Bun.serve 监听与转发 | `Bun.serve`, `serviceWorkerUrl`, `spawn` |
+| 08 | [Bun.serve Routes](./08-bun-serve-routes/) | 路由、Header、JSON 响应 | `Bun.serve`, `Response.json` |
+| 09 | [Bun.serve Streaming](./09-bun-serve-streaming/) | 流式响应与 chunk 读取 | `Bun.serve`, `ReadableStream` |
+| 10 | [Bun.serve WebSocket](./10-bun-serve-websocket/) | WebSocket 转发 (浏览器内 best-effort) | `Bun.serve`, `WebSocket` |
+| 11 | [Bun.serve TLS Proxy](./11-bun-serve-tls/) | 通过 SW 代理 https 请求 | `Bun.serve`, `serviceWorkerUrl` |
+| 12 | [Bun Install (Proxy)](./12-bun-install/) | 通过 Vite 代理访问 npm 注册表 | `bun install`, `BUN_INSTALL_REGISTRY` |
 
 ## 快速开始
 

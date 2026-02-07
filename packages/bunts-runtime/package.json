@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@vitamin-ai/virtual-fs": "workspace:*",
+    "fflate": "^0.8.2",
     "typescript": "^5.7.0"
   },
   "devDependencies": {

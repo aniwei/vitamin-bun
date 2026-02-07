@@ -1,12 +1,12 @@
 import { describe, it, expect } from 'vitest'
 import { VirtualFileSystem } from '../../../virtual-fs/src/index'
-import { createPolyfill } from '../polyfill'
-import { createCoreModules } from '../core-modules'
+import { createBunRuntime } from '../bun-runtime'
+import { createCoreModules } from '../core-modules/index'
 import { ModuleLoader } from '../module-loader'
 import { Transpiler } from '../transpiler'
 
 function createLoader(vfs: VirtualFileSystem) {
-  const polyfill = createPolyfill(vfs, {}, () => {}, () => {})
+  const polyfill = createBunRuntime(vfs, {}, () => {}, () => {})
   const coreModules = createCoreModules(vfs, polyfill)
 
   return new ModuleLoader({
@@ -20,7 +20,7 @@ function createLoader(vfs: VirtualFileSystem) {
 describe('stream module', () => {
   it('Readable emits data and end', () => {
     const vfs = new VirtualFileSystem()
-    const polyfill = createPolyfill(vfs, {}, () => {}, () => {})
+    const polyfill = createBunRuntime(vfs, {}, () => {}, () => {})
     const core = createCoreModules(vfs, polyfill)
 
     const stream = core.stream as { Readable: new () => { on: (e: string, cb: (data?: unknown) => void) => void; push: (d: unknown) => void } }
@@ -38,7 +38,7 @@ describe('stream module', () => {
 
   it('Writable emits finish', () => {
     const vfs = new VirtualFileSystem()
-    const polyfill = createPolyfill(vfs, {}, () => {}, () => {})
+    const polyfill = createBunRuntime(vfs, {}, () => {}, () => {})
     const core = createCoreModules(vfs, polyfill)
 
     const stream = core.stream as { Writable: new (opts?: { write?: (c: unknown) => void }) => { on: (e: string, cb: () => void) => void; write: (d: unknown) => boolean; end: () => void } }
@@ -59,7 +59,7 @@ describe('stream module', () => {
 
   it('Transform transforms data', () => {
     const vfs = new VirtualFileSystem()
-    const polyfill = createPolyfill(vfs, {}, () => {}, () => {})
+    const polyfill = createBunRuntime(vfs, {}, () => {}, () => {})
     const core = createCoreModules(vfs, polyfill)
 
     const stream = core.stream as { Transform: new (opts?: { transform?: (c: unknown) => unknown }) => { on: (e: string, cb: (d?: unknown) => void) => void; write: (d: unknown) => boolean; end: () => void } }
@@ -77,7 +77,7 @@ describe('stream module', () => {
 
   it('pipeline chains streams', async () => {
     const vfs = new VirtualFileSystem()
-    const polyfill = createPolyfill(vfs, {}, () => {}, () => {})
+    const polyfill = createBunRuntime(vfs, {}, () => {}, () => {})
     const core = createCoreModules(vfs, polyfill)
 
     const stream = core.stream as {

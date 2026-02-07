@@ -6,6 +6,26 @@ export interface RuntimeEnv {
   argv?: string[]
 }
 
+export type BunServeHandler = (request: Request) => Response | Promise<Response>
+
+export interface BunServeOptions {
+  fetch: BunServeHandler
+  port?: number
+  hostname?: string
+  tls?: boolean
+}
+
+export interface BunServeHandle {
+  port: number
+  hostname?: string
+  stop: () => void
+}
+
+export interface BunRuntimeHooks {
+  onServeRegister?: (port: number) => void
+  onServeUnregister?: (port: number) => void
+}
+
 export interface BunRuntime {
   Bun: {
     env: Record<string, string>
@@ -15,6 +35,8 @@ export interface BunRuntime {
       arrayBuffer: () => Promise<ArrayBuffer>
     }
     write: (path: string, data: string | Uint8Array) => Promise<void>
+    serve: (options: BunServeOptions) => BunServeHandle
+    __dispatchServeRequest: (request: Request) => Promise<Response>
   }
   process: {
     env: Record<string, string>
@@ -36,8 +58,12 @@ export function createBunRuntime(
   env: RuntimeEnv,
   onStdout: (data: Uint8Array) => void,
   onStderr: (data: Uint8Array) => void,
+  hooks: BunRuntimeHooks = {},
 ): BunRuntime {
   const encoder = new TextEncoder()
+  const servers = new Map<number, BunServeHandler>()
+  const onServeRegister = hooks.onServeRegister
+  const onServeUnregister = hooks.onServeUnregister
 
   const stdout = {
     write(data: string | Uint8Array) {
@@ -75,6 +101,30 @@ export function createBunRuntime(
     })
   }
 
+  const serve = (options: BunServeOptions): BunServeHandle => {
+    const port = options.port ?? 3000
+    servers.set(port, options.fetch)
+    onServeRegister?.(port)
+
+    return {
+      port,
+      hostname: options.hostname,
+      stop: () => {
+        servers.delete(port)
+        onServeUnregister?.(port)
+      },
+    }
+  }
+
+  const dispatchServeRequest = async (request: Request): Promise<Response> => {
+    const port = getPortFromUrl(request.url)
+    const handler = servers.get(port)
+    if (!handler) {
+      return new Response('Not Found', { status: 404 })
+    }
+    return await handler(request)
+  }
+
   return {
     Bun: {
       env: bunEnv,
@@ -96,6 +146,8 @@ export function createBunRuntime(
       async write(path: string, data: string | Uint8Array) {
         vfs.writeFile(path, data)
       },
+      serve,
+      __dispatchServeRequest: dispatchServeRequest,
     },
     process: {
       env: bunEnv,
@@ -138,5 +190,14 @@ export function createBunRuntime(
       timeLog: () => {},
       timeStamp: () => {},
     },
+  }
+}
+
+function getPortFromUrl(url: string): number {
+  try {
+    const parsed = new URL(url)
+    return parsed.port ? Number(parsed.port) : parsed.protocol === 'https:' ? 443 : 80
+  } catch {
+    return 80
   }
 }

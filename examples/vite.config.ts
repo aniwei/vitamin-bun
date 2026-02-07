@@ -20,5 +20,12 @@ export default defineConfig({
       'Cross-Origin-Opener-Policy': 'same-origin',
       'Cross-Origin-Embedder-Policy': 'require-corp',
     },
+    proxy: {
+      '/npm': {
+        target: 'https://registry.npmjs.org',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/npm/, ''),
+      },
+    },
   },
 })
