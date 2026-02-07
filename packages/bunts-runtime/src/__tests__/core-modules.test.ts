@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { VirtualFileSystem } from '../../../virtual-fs/src/index.js'
-import { createPolyfill } from '../polyfill.js'
-import { createCoreModules } from '../core-modules.js'
+import { VirtualFileSystem } from '../../../virtual-fs/src/index'
+import { createPolyfill } from '../polyfill'
+import { createCoreModules } from '../core-modules'
 
 describe('Core Modules', () => {
   it('path.join works', () => {

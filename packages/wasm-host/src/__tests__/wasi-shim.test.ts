@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { VirtualFileSystem, Whence } from '@vitamin-ai/virtual-fs'
-import { WasiShim, WasiExitError } from '../wasi-shim.js'
-import { WasiErrno, WasiClockId, WasiOflags, WasiWhence } from '../types.js'
+import { WasiShim, WasiExitError } from '../wasi-shim'
+import { WasiErrno, WasiClockId, WasiOflags, WasiWhence } from '../types'
 
 // ─── Helpers ──────────────────────────────────────────────────
 

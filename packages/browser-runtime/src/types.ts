@@ -6,6 +6,9 @@
 export type WorkerInMessage =
   | { type: 'init'; wasmBytes?: ArrayBuffer; files: Record<string, string>; env?: Record<string, string>; sab?: SharedArrayBuffer }
   | { type: 'exec'; command: string; args: string[]; id: number }
+  | { type: 'fs:write'; path: string; content: string | Uint8Array }
+  | { type: 'fs:mkdir'; path: string }
+  | { type: 'fs:unlink'; path: string }
   | { type: 'stdin'; data: Uint8Array }
   | { type: 'kill'; id: number }
 

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { VirtualFileSystem } from '../../../virtual-fs/src/index.js'
-import { RuntimeCore } from '../runtime-core.js'
+import { VirtualFileSystem } from '../../../virtual-fs/src/index'
+import { RuntimeCore } from '../runtime-core'
 
 describe('RuntimeCore', () => {
   it('executes a simple entry file', async () => {

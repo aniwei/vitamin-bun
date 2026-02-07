@@ -1,8 +1,8 @@
 import type { VirtualFileSystem } from '@vitamin-ai/virtual-fs'
-import { createPolyfill, type RuntimeEnv } from './polyfill.js'
-import { createCoreModules } from './core-modules.js'
-import { Transpiler } from './transpiler.js'
-import { ModuleLoader } from './module-loader.js'
+import { createPolyfill, type RuntimeEnv } from './polyfill'
+import { createCoreModules } from './core-modules'
+import { Transpiler } from './transpiler'
+import { ModuleLoader } from './module-loader'
 
 export interface EvaluatorOptions {
   vfs: VirtualFileSystem

@@ -103,6 +103,21 @@ export class WasmWorker {
     this.postMessage({ type: 'stdin', data })
   }
 
+  /** Sync a file write into the worker VFS. */
+  writeFile(path: string, content: string | Uint8Array): void {
+    this.postMessage({ type: 'fs:write', path, content })
+  }
+
+  /** Ensure a directory exists in the worker VFS. */
+  mkdir(path: string): void {
+    this.postMessage({ type: 'fs:mkdir', path })
+  }
+
+  /** Remove a file in the worker VFS. */
+  unlink(path: string): void {
+    this.postMessage({ type: 'fs:unlink', path })
+  }
+
   /** Kill a running process. */
   kill(id: number): void {
     this.postMessage({ type: 'kill', id })

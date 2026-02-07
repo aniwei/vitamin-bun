@@ -8,6 +8,7 @@ export default defineConfig({
       '@vitamin-ai/sdk': resolve(__dirname, '../packages/sdk/src'),
       '@vitamin-ai/wasm-host': resolve(__dirname, '../packages/wasm-host/src'),
       '@vitamin-ai/virtual-fs': resolve(__dirname, '../packages/virtual-fs/src'),
+      '@vitamin-ai/bunts-runtime': resolve(__dirname, '../packages/bunts-runtime/src'),
       '@vitamin-ai/browser-runtime': resolve(__dirname, '../packages/browser-runtime/src'),
       '@vitamin-ai/network-proxy': resolve(__dirname, '../packages/network-proxy/src'),
     },

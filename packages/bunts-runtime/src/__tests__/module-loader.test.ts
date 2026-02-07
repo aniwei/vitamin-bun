@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { VirtualFileSystem } from '../../../virtual-fs/src/index.js'
-import { ModuleLoader } from '../module-loader.js'
-import { Transpiler } from '../transpiler.js'
+import { VirtualFileSystem } from '../../../virtual-fs/src/index'
+import { ModuleLoader } from '../module-loader'
+import { Transpiler } from '../transpiler'
 
 function createRuntime() {
   return {

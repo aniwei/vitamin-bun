@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { JSContextBridge } from '../js-context.js'
-import { MemoryAccess } from '../memory.js'
+import { JSContextBridge } from '../js-context'
+import { MemoryAccess } from '../memory'
 
 /**
  * Helper: write a string to WASM memory and return [ptr, len].

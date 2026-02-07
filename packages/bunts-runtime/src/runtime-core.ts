@@ -1,9 +1,9 @@
 import type { VirtualFileSystem } from '@vitamin-ai/virtual-fs'
-import { Evaluator } from './evaluator.js'
-import { createCoreModules } from './core-modules.js'
-import { Transpiler } from './transpiler.js'
-import { ModuleLoader } from './module-loader.js'
-import type { ModuleRecord } from './module-loader.js'
+import { Evaluator } from './evaluator'
+import { createCoreModules } from './core-modules'
+import { Transpiler } from './transpiler'
+import { ModuleLoader } from './module-loader'
+import type { ModuleRecord } from './module-loader'
 
 export interface RuntimeCoreOptions {
   vfs: VirtualFileSystem

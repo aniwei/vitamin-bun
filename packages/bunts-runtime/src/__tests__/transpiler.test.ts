@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { Transpiler } from '../transpiler.js'
+import { Transpiler } from '../transpiler'
 
 describe('Transpiler', () => {
   it('transpiles TypeScript to CommonJS', () => {

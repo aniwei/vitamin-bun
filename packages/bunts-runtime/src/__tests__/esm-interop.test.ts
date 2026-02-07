@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { VirtualFileSystem } from '../../../virtual-fs/src/index.js'
-import { ModuleLoader } from '../module-loader.js'
-import { Transpiler } from '../transpiler.js'
+import { VirtualFileSystem } from '../../../virtual-fs/src/index'
+import { ModuleLoader } from '../module-loader'
+import { Transpiler } from '../transpiler'
 
 function createRuntime() {
   return {
@@ -45,7 +45,7 @@ describe('ESM execution and interop', () => {
   it('CJS require ESM returns default and named exports', async () => {
     const vfs = new VirtualFileSystem()
     vfs.writeFile('/esm.ts', 'export const x = 3; export default 9')
-    vfs.writeFile('/cjs.js', "const esm = require('./esm'); module.exports = esm;")
+    vfs.writeFile('/cjs', "const esm = require('./esm'); module.exports = esm;")
 
     const loader = new ModuleLoader({
       vfs,
@@ -53,7 +53,7 @@ describe('ESM execution and interop', () => {
       runtime: createRuntime(),
     })
 
-    const mod = await loader.load('/cjs.js')
+    const mod = await loader.load('/cjs')
     const exportsObj = mod.exports as { x?: number; default?: number }
     expect(exportsObj.x).toBe(3)
     expect(exportsObj.default).toBe(9)

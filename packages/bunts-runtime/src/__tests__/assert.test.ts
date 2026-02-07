@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { VirtualFileSystem } from '../../../virtual-fs/src/index.js'
-import { createPolyfill } from '../polyfill.js'
-import { createCoreModules } from '../core-modules.js'
-import { ModuleLoader } from '../module-loader.js'
-import { Transpiler } from '../transpiler.js'
+import { VirtualFileSystem } from '../../../virtual-fs/src/index'
+import { createPolyfill } from '../polyfill'
+import { createCoreModules } from '../core-modules'
+import { ModuleLoader } from '../module-loader'
+import { Transpiler } from '../transpiler'
 
 function createLoader(vfs: VirtualFileSystem) {
   const polyfill = createPolyfill(vfs, {}, () => {}, () => {})
@@ -56,10 +56,10 @@ describe('assert module', () => {
 
   it('resolves node:assert alias', async () => {
     const vfs = new VirtualFileSystem()
-    vfs.writeFile('/index.js', "module.exports = require('node:assert')")
+    vfs.writeFile('/index', "module.exports = require('node:assert')")
 
     const loader = createLoader(vfs)
-    const mod = await loader.load('/index.js')
+    const mod = await loader.load('/index')
     expect((mod.exports as { ok?: unknown }).ok).toBeTypeOf('function')
   })
 })

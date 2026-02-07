@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { VirtualFileSystem } from '../../../virtual-fs/src/index.js'
-import { ModuleLoader } from '../module-loader.js'
-import { Transpiler } from '../transpiler.js'
-import { createPolyfill } from '../polyfill.js'
-import { createCoreModules } from '../core-modules.js'
+import { VirtualFileSystem } from '../../../virtual-fs/src/index'
+import { ModuleLoader } from '../module-loader'
+import { Transpiler } from '../transpiler'
+import { createPolyfill } from '../polyfill'
+import { createCoreModules } from '../core-modules'
 
 function createLoader(vfs: VirtualFileSystem) {
   const polyfill = createPolyfill(vfs, {}, () => {}, () => {})
@@ -20,23 +20,23 @@ function createLoader(vfs: VirtualFileSystem) {
 describe('Core module aliases', () => {
   it('resolves node:fs', async () => {
     const vfs = new VirtualFileSystem()
-    vfs.writeFile('/index.js', "module.exports = require('node:fs')")
+    vfs.writeFile('/index', "module.exports = require('node:fs')")
 
     const loader = createLoader(vfs)
-    const mod = await loader.load('/index.js')
+    const mod = await loader.load('/index')
     expect((mod.exports as { readFileSync?: unknown }).readFileSync).toBeTypeOf('function')
   })
 
   it('resolves fs/promises', async () => {
     const vfs = new VirtualFileSystem()
     vfs.writeFile('/data.txt', 'hello')
-    vfs.writeFile('/index.js', `
+    vfs.writeFile('/index', `
       const fsp = require('fs/promises')
       module.exports = fsp
     `)
 
     const loader = createLoader(vfs)
-    const mod = await loader.load('/index.js')
+    const mod = await loader.load('/index')
     const fsp = mod.exports as { readFile?: (path: string, enc?: string) => Promise<string | Uint8Array> }
     const text = await fsp.readFile?.('/data.txt', 'utf-8')
     expect(text).toBe('hello')
@@ -44,14 +44,14 @@ describe('Core module aliases', () => {
 
   it('resolves path/posix and path/win32', async () => {
     const vfs = new VirtualFileSystem()
-    vfs.writeFile('/index.js', `
+    vfs.writeFile('/index', `
       const posix = require('path/posix')
       const win32 = require('path/win32')
       module.exports = { posix, win32 }
     `)
 
     const loader = createLoader(vfs)
-    const mod = await loader.load('/index.js')
+    const mod = await loader.load('/index')
     const out = mod.exports as { posix: { join: (...parts: string[]) => string }; win32: { join: (...parts: string[]) => string } }
 
     expect(out.posix.join('/a', 'b')).toBe('/a/b')

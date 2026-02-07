@@ -30,6 +30,22 @@ interface ExecMessage {
   id: number
 }
 
+interface FsWriteMessage {
+  type: 'fs:write'
+  path: string
+  content: string | Uint8Array
+}
+
+interface FsMkdirMessage {
+  type: 'fs:mkdir'
+  path: string
+}
+
+interface FsUnlinkMessage {
+  type: 'fs:unlink'
+  path: string
+}
+
 interface StdinMessage {
   type: 'stdin'
   data: Uint8Array
@@ -40,7 +56,14 @@ interface KillMessage {
   id: number
 }
 
-type IncomingMessage = InitMessage | ExecMessage | StdinMessage | KillMessage
+type IncomingMessage =
+  | InitMessage
+  | ExecMessage
+  | FsWriteMessage
+  | FsMkdirMessage
+  | FsUnlinkMessage
+  | StdinMessage
+  | KillMessage
 
 // ─── Runtime State ──────────────────────────────────────────────
 
@@ -64,7 +87,7 @@ function postError(message: string): void {
  * Ensure all parent directories for `filePath` exist in the VFS,
  * then write the file.
  */
-function seedFile(fs: VirtualFileSystem, filePath: string, content: string): void {
+function seedFile(fs: VirtualFileSystem, filePath: string, content: string | Uint8Array): void {
   const lastSlash = filePath.lastIndexOf('/')
   if (lastSlash > 0) {
     fs.mkdirp(filePath.substring(0, lastSlash))
@@ -132,6 +155,21 @@ function handleKill(msg: KillMessage): void {
   post({ type: 'exit', id: msg.id, code: 137 })
 }
 
+function handleFsWrite(msg: FsWriteMessage): void {
+  if (!vfs) return
+  seedFile(vfs, msg.path, msg.content)
+}
+
+function handleFsMkdir(msg: FsMkdirMessage): void {
+  if (!vfs) return
+  vfs.mkdirp(msg.path)
+}
+
+function handleFsUnlink(msg: FsUnlinkMessage): void {
+  if (!vfs) return
+  if (vfs.exists(msg.path)) vfs.unlink(msg.path)
+}
+
 // ─── Main Message Loop ──────────────────────────────────────────
 
 self.onmessage = async (event: MessageEvent<IncomingMessage>) => {
@@ -149,6 +187,15 @@ self.onmessage = async (event: MessageEvent<IncomingMessage>) => {
       break
     case 'kill':
       handleKill(msg)
+      break
+    case 'fs:write':
+      handleFsWrite(msg)
+      break
+    case 'fs:mkdir':
+      handleFsMkdir(msg)
+      break
+    case 'fs:unlink':
+      handleFsUnlink(msg)
       break
     default:
       postError(`Unknown message type: ${(msg as { type: string }).type}`)

@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { VirtualFileSystem } from '../../../virtual-fs/src/index.js'
-import { createPolyfill } from '../polyfill.js'
-import { createCoreModules } from '../core-modules.js'
-import { ModuleLoader } from '../module-loader.js'
-import { Transpiler } from '../transpiler.js'
+import { VirtualFileSystem } from '../../../virtual-fs/src/index'
+import { createPolyfill } from '../polyfill'
+import { createCoreModules } from '../core-modules'
+import { ModuleLoader } from '../module-loader'
+import { Transpiler } from '../transpiler'
 
 function createLoader(vfs: VirtualFileSystem) {
   const polyfill = createPolyfill(vfs, {}, () => {}, () => {})
@@ -22,12 +22,12 @@ describe('Crypto module', () => {
     const vfs = new VirtualFileSystem()
     const loader = createLoader(vfs)
 
-    vfs.writeFile('/index.js', `
+    vfs.writeFile('/index', `
       const { randomBytes } = require('crypto')
       module.exports = randomBytes(16).length
     `)
 
-    const mod = await loader.load('/index.js')
+    const mod = await loader.load('/index')
     expect(mod.exports).toBe(16)
   })
 
@@ -35,12 +35,12 @@ describe('Crypto module', () => {
     const vfs = new VirtualFileSystem()
     const loader = createLoader(vfs)
 
-    vfs.writeFile('/index.js', `
+    vfs.writeFile('/index', `
       const crypto = require('node:crypto')
       module.exports = typeof crypto.randomBytes === 'function'
     `)
 
-    const mod = await loader.load('/index.js')
+    const mod = await loader.load('/index')
     expect(mod.exports).toBe(true)
   })
 
@@ -48,12 +48,12 @@ describe('Crypto module', () => {
     const vfs = new VirtualFileSystem()
     const loader = createLoader(vfs)
 
-    vfs.writeFile('/index.js', `
+    vfs.writeFile('/index', `
       const { createHash } = require('crypto')
       module.exports = createHash('sha256').update('hello').digestAsync('hex')
     `)
 
-    const mod = await loader.load('/index.js')
+    const mod = await loader.load('/index')
     const digest = await (mod.exports as unknown as Promise<string>)
     expect(digest).toBe('2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824')
   })

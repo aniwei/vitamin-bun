@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { VirtualFileSystem } from '../vfs.js'
-import { InodeKind, Whence } from '../types.js'
+import { VirtualFileSystem } from '../vfs'
+import { InodeKind, Whence } from '../types'
 
 describe('VirtualFileSystem', () => {
   let vfs: VirtualFileSystem

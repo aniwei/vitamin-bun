@@ -77,15 +77,18 @@ class BunContainerImpl implements BunContainer {
         content: string | Uint8Array,
       ): Promise<void> => {
         this.vfs.writeFile(path, content)
+        this.worker.writeFile(path, content)
       },
       mkdir: async (path: string): Promise<void> => {
         this.vfs.mkdirp(path)
+        this.worker.mkdir(path)
       },
       readdir: async (path: string): Promise<string[]> => {
         return this.vfs.readdir(path).map((e) => e.name)
       },
       unlink: async (path: string): Promise<void> => {
         this.vfs.unlink(path)
+        this.worker.unlink(path)
       },
       exists: async (path: string): Promise<boolean> => {
         return this.vfs.exists(path)

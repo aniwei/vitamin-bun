@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { VirtualFileSystem } from '../../../virtual-fs/src/index.js'
-import { ModuleLoader } from '../module-loader.js'
-import { Transpiler } from '../transpiler.js'
+import { VirtualFileSystem } from '../../../virtual-fs/src/index'
+import { ModuleLoader } from '../module-loader'
+import { Transpiler } from '../transpiler'
 
 function createRuntime() {
   return {
@@ -15,9 +15,9 @@ describe('ModuleLoader package.json resolution', () => {
   it('resolves main field', async () => {
     const vfs = new VirtualFileSystem()
     vfs.mkdirp('/pkg')
-    vfs.writeFile('/pkg/package.json', JSON.stringify({ main: 'dist/index.js' }))
+    vfs.writeFile('/pkg/package.json', JSON.stringify({ main: 'dist/index' }))
     vfs.mkdirp('/pkg/dist')
-    vfs.writeFile('/pkg/dist/index.js', 'module.exports = { ok: true }')
+    vfs.writeFile('/pkg/dist/index', 'module.exports = { ok: true }')
 
     const loader = new ModuleLoader({
       vfs,
@@ -32,11 +32,11 @@ describe('ModuleLoader package.json resolution', () => {
   it('prefers module field over main', async () => {
     const vfs = new VirtualFileSystem()
     vfs.mkdirp('/pkg')
-    vfs.writeFile('/pkg/package.json', JSON.stringify({ module: 'esm/index.js', main: 'cjs/index.js' }))
+    vfs.writeFile('/pkg/package.json', JSON.stringify({ module: 'esm/index', main: 'cjs/index' }))
     vfs.mkdirp('/pkg/esm')
     vfs.mkdirp('/pkg/cjs')
-    vfs.writeFile('/pkg/esm/index.js', 'module.exports = { kind: "esm" }')
-    vfs.writeFile('/pkg/cjs/index.js', 'module.exports = { kind: "cjs" }')
+    vfs.writeFile('/pkg/esm/index', 'module.exports = { kind: "esm" }')
+    vfs.writeFile('/pkg/cjs/index', 'module.exports = { kind: "cjs" }')
 
     const loader = new ModuleLoader({
       vfs,
@@ -51,9 +51,9 @@ describe('ModuleLoader package.json resolution', () => {
   it('resolves exports field', async () => {
     const vfs = new VirtualFileSystem()
     vfs.mkdirp('/pkg')
-    vfs.writeFile('/pkg/package.json', JSON.stringify({ exports: { '.': './src/index.js' } }))
+    vfs.writeFile('/pkg/package.json', JSON.stringify({ exports: { '.': './src/index' } }))
     vfs.mkdirp('/pkg/src')
-    vfs.writeFile('/pkg/src/index.js', 'module.exports = { ok: "exports" }')
+    vfs.writeFile('/pkg/src/index', 'module.exports = { ok: "exports" }')
 
     const loader = new ModuleLoader({
       vfs,

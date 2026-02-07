@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { VirtualFileSystem } from '../../../virtual-fs/src/index.js'
-import { createPolyfill } from '../polyfill.js'
+import { VirtualFileSystem } from '../../../virtual-fs/src/index'
+import { createPolyfill } from '../polyfill'
 
 describe('process module', () => {
   it('exposes platform/arch/version/versions', () => {

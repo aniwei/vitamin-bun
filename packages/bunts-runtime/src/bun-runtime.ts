@@ -6,7 +6,7 @@ export interface RuntimeEnv {
   argv?: string[]
 }
 
-export interface RuntimePolyfill {
+export interface BunRuntime {
   Bun: {
     env: Record<string, string>
     file: (path: string) => {
@@ -31,12 +31,12 @@ export interface RuntimePolyfill {
   console: Console
 }
 
-export function createPolyfill(
+export function createBunRuntime(
   vfs: VirtualFileSystem,
   env: RuntimeEnv,
   onStdout: (data: Uint8Array) => void,
   onStderr: (data: Uint8Array) => void,
-): RuntimePolyfill {
+): BunRuntime {
   const encoder = new TextEncoder()
 
   const stdout = {

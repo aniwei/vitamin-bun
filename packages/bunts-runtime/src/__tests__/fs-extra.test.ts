@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { VirtualFileSystem } from '../../../virtual-fs/src/index.js'
-import { createPolyfill } from '../polyfill.js'
-import { createCoreModules } from '../core-modules.js'
-import { ModuleLoader } from '../module-loader.js'
-import { Transpiler } from '../transpiler.js'
+import { VirtualFileSystem } from '../../../virtual-fs/src/index'
+import { createPolyfill } from '../polyfill'
+import { createCoreModules } from '../core-modules'
+import { ModuleLoader } from '../module-loader'
+import { Transpiler } from '../transpiler'
 
 function createLoader(vfs: VirtualFileSystem) {
   const polyfill = createPolyfill(vfs, {}, () => {}, () => {})
@@ -58,10 +58,10 @@ describe('fs extra', () => {
 
   it('resolves node:fs and node:fs/promises alias', async () => {
     const vfs = new VirtualFileSystem()
-    vfs.writeFile('/index.js', "module.exports = { fs: require('node:fs'), fsp: require('node:fs/promises') }")
+    vfs.writeFile('/index', "module.exports = { fs: require('node:fs'), fsp: require('node:fs/promises') }")
 
     const loader = createLoader(vfs)
-    const mod = await loader.load('/index.js')
+    const mod = await loader.load('/index')
     const out = mod.exports as { fs: { statSync?: unknown }; fsp: { stat?: unknown } }
     expect(out.fs.statSync).toBeTypeOf('function')
     expect(out.fsp.stat).toBeTypeOf('function')

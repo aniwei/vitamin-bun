@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { HttpProxy } from '../http-proxy.js'
-import { AddressFamily, SocketType, SocketState } from '../types.js'
+import { HttpProxy } from '../http-proxy'
+import { AddressFamily, SocketType, SocketState } from '../types'
 
 describe('HttpProxy', () => {
   let proxy: HttpProxy

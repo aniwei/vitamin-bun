@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { MemoryAccess } from '../memory.js'
+import { MemoryAccess } from '../memory'
 
 describe('MemoryAccess', () => {
   let memory: WebAssembly.Memory

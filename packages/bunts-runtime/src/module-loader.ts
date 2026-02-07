@@ -1,6 +1,6 @@
+import { Transpiler, type LoaderType } from './transpiler'
+import { dirname, extname, join, normalizePath } from './path'
 import type { VirtualFileSystem } from '@vitamin-ai/virtual-fs'
-import { Transpiler, type LoaderType } from './transpiler.js'
-import { dirname, extname, join, normalizePath } from './path.js'
 
 export interface ModuleRecord {
   id: string
@@ -308,16 +308,38 @@ export class ModuleLoader {
       return
     }
 
-    const exportsObj = exportsValue as Record<string, unknown>
+    let exportsObj = exportsValue as Record<string, unknown>
+
+    const canAssign = (key: string, target: Record<string, unknown>) => {
+      const descriptor = Object.getOwnPropertyDescriptor(target, key)
+      if (!descriptor) return Object.isExtensible(target)
+      if ('writable' in descriptor) return Boolean(descriptor.writable)
+      return typeof descriptor.set === 'function'
+    }
+
+    const tryAssign = (key: string, value: unknown) => {
+      if (canAssign(key, exportsObj)) {
+        exportsObj[key] = value
+        return
+      }
+
+      if (typeof exportsValue === 'object' && exportsValue !== null && typeof exportsValue !== 'function') {
+        exportsObj = { ...exportsObj }
+        module.exports = exportsObj
+        if (canAssign(key, exportsObj)) {
+          exportsObj[key] = value
+        }
+      }
+    }
 
     if (isEsm) {
       if (!('default' in exportsObj) && Object.keys(exportsObj).length === 1 && exportsObj.__esModule) {
         // no-op; already flagged
       }
-      exportsObj.__esModule = true
+      tryAssign('__esModule', true)
     } else {
       if (!('default' in exportsObj)) {
-        exportsObj.default = exportsObj
+        tryAssign('default', exportsObj)
       }
     }
   }
@@ -375,6 +397,7 @@ export class ModuleLoader {
     if (raw.startsWith('assert/strict')) return 'assert/strict'
     if (raw.startsWith('assert')) return 'assert'
     if (raw.startsWith('util')) return 'util'
+    if (raw.startsWith('stream/web')) return 'stream/web'
     if (raw.startsWith('stream/promises')) return 'stream/promises'
     if (raw.startsWith('stream')) return 'stream'
     if (raw.startsWith('os')) return 'os'
@@ -392,6 +415,12 @@ export class ModuleLoader {
     if (raw.startsWith('constants')) return 'constants'
     if (raw.startsWith('punycode')) return 'punycode'
     if (raw.startsWith('diagnostics_channel')) return 'diagnostics_channel'
+    if (raw.startsWith('zlib')) return 'zlib'
+    if (raw.startsWith('worker_threads')) return 'worker_threads'
+    if (raw.startsWith('https')) return 'https'
+    if (raw.startsWith('http')) return 'http'
+    if (raw.startsWith('tls')) return 'tls'
+    if (raw.startsWith('net')) return 'net'
     return raw
   }
 }

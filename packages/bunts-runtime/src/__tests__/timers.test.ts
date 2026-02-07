@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { VirtualFileSystem } from '../../../virtual-fs/src/index.js'
-import { createPolyfill } from '../polyfill.js'
-import { createCoreModules } from '../core-modules.js'
-import { ModuleLoader } from '../module-loader.js'
-import { Transpiler } from '../transpiler.js'
+import { VirtualFileSystem } from '../../../virtual-fs/src/index'
+import { createPolyfill } from '../polyfill'
+import { createCoreModules } from '../core-modules'
+import { ModuleLoader } from '../module-loader'
+import { Transpiler } from '../transpiler'
 
 function createLoader(vfs: VirtualFileSystem) {
   const polyfill = createPolyfill(vfs, {}, () => {}, () => {})
@@ -22,12 +22,12 @@ describe('Timers and nextTick', () => {
     const vfs = new VirtualFileSystem()
     const loader = createLoader(vfs)
 
-    vfs.writeFile('/index.js', `
+    vfs.writeFile('/index', `
       const { setTimeout } = require('timers/promises')
       module.exports = setTimeout(10, 'ok')
     `)
 
-    const mod = await loader.load('/index.js')
+    const mod = await loader.load('/index')
     const result = await (mod.exports as unknown as Promise<unknown>)
     expect(result).toBe('ok')
   })
@@ -36,7 +36,7 @@ describe('Timers and nextTick', () => {
     const vfs = new VirtualFileSystem()
     const loader = createLoader(vfs)
 
-    vfs.writeFile('/index.js', `
+    vfs.writeFile('/index', `
       const timers = require('timers')
       let ran = false
       module.exports = new Promise((resolve) => {
@@ -47,7 +47,7 @@ describe('Timers and nextTick', () => {
       })
     `)
 
-    const mod = await loader.load('/index.js')
+    const mod = await loader.load('/index')
     const result = await (mod.exports as unknown as Promise<unknown>)
     expect(result).toBe(true)
   })
@@ -56,7 +56,7 @@ describe('Timers and nextTick', () => {
     const vfs = new VirtualFileSystem()
     const loader = createLoader(vfs)
 
-    vfs.writeFile('/index.js', `
+    vfs.writeFile('/index', `
       const timers = require('timers')
       let count = 0
       module.exports = new Promise((resolve) => {
@@ -70,7 +70,7 @@ describe('Timers and nextTick', () => {
       })
     `)
 
-    const mod = await loader.load('/index.js')
+    const mod = await loader.load('/index')
     const result = await (mod.exports as unknown as Promise<unknown>)
     expect(result).toBe(2)
   })
@@ -79,12 +79,12 @@ describe('Timers and nextTick', () => {
     const vfs = new VirtualFileSystem()
     const loader = createLoader(vfs)
 
-    vfs.writeFile('/index.js', `
+    vfs.writeFile('/index', `
       const timers = require('node:timers')
       module.exports = typeof timers.setTimeout === 'function'
     `)
 
-    const mod = await loader.load('/index.js')
+    const mod = await loader.load('/index')
     expect(mod.exports).toBe(true)
   })
 

@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { VirtualFileSystem } from '../../../virtual-fs/src/index.js'
-import { createPolyfill } from '../polyfill.js'
-import { createCoreModules } from '../core-modules.js'
-import { ModuleLoader } from '../module-loader.js'
-import { Transpiler } from '../transpiler.js'
+import { VirtualFileSystem } from '../../../virtual-fs/src/index'
+import { createPolyfill } from '../polyfill'
+import { createCoreModules } from '../core-modules'
+import { ModuleLoader } from '../module-loader'
+import { Transpiler } from '../transpiler'
 
 function createLoader(vfs: VirtualFileSystem) {
   const polyfill = createPolyfill(vfs, {}, () => {}, () => {})
@@ -22,7 +22,7 @@ describe('Events module', () => {
     const vfs = new VirtualFileSystem()
     const loader = createLoader(vfs)
 
-    vfs.writeFile('/index.js', `
+    vfs.writeFile('/index', `
       const { EventEmitter } = require('events')
       const ee = new EventEmitter()
       let count = 0
@@ -32,7 +32,7 @@ describe('Events module', () => {
       module.exports = count
     `)
 
-    const mod = await loader.load('/index.js')
+    const mod = await loader.load('/index')
     expect(mod.exports).toBe(2)
   })
 
@@ -40,7 +40,7 @@ describe('Events module', () => {
     const vfs = new VirtualFileSystem()
     const loader = createLoader(vfs)
 
-    vfs.writeFile('/index.js', `
+    vfs.writeFile('/index', `
       const { EventEmitter } = require('events')
       const ee = new EventEmitter()
       let count = 0
@@ -50,7 +50,7 @@ describe('Events module', () => {
       module.exports = count
     `)
 
-    const mod = await loader.load('/index.js')
+    const mod = await loader.load('/index')
     expect(mod.exports).toBe(1)
   })
 
@@ -58,12 +58,12 @@ describe('Events module', () => {
     const vfs = new VirtualFileSystem()
     const loader = createLoader(vfs)
 
-    vfs.writeFile('/index.js', `
+    vfs.writeFile('/index', `
       const events = require('node:events')
       module.exports = typeof events.EventEmitter === 'function'
     `)
 
-    const mod = await loader.load('/index.js')
+    const mod = await loader.load('/index')
     expect(mod.exports).toBe(true)
   })
 })
