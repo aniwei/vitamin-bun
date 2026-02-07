@@ -18,6 +18,7 @@ Vitamin Bun 使用示例合集，从入门到进阶。
 | 10 | [Bun.serve WebSocket](./10-bun-serve-websocket/) | WebSocket 转发 (浏览器内 best-effort) | `Bun.serve`, `WebSocket` |
 | 11 | [Bun.serve TLS Proxy](./11-bun-serve-tls/) | 通过 SW 代理 https 请求 | `Bun.serve`, `serviceWorkerUrl` |
 | 12 | [Bun Install (Proxy)](./12-bun-install/) | 通过 Vite 代理访问 npm 注册表 | `bun install`, `BUN_INSTALL_REGISTRY` |
+| 13 | [Plugin net/http/https](./13-plugin-net-http/) | 使用插件拦截模块加载与网络 API | `Bun.plugin`, `onModuleLoad` |
 
 ## 快速开始
 

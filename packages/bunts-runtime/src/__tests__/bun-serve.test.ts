@@ -34,4 +34,48 @@ describe('Bun.serve', () => {
     const response = await runtime.Bun.__dispatchServeRequest(new Request('http://localhost:3000/'))
     expect(response.status).toBe(404)
   })
+
+  it('stops a server and unregisters it', async () => {
+    const vfs = new VirtualFileSystem()
+    const unregistered: number[] = []
+    const runtime = createBunRuntime(
+      vfs,
+      {},
+      () => {},
+      () => {},
+      {
+        onServeUnregister: (port) => unregistered.push(port),
+      },
+    )
+
+    const server = runtime.Bun.serve({
+      port: 3001,
+      fetch: () => new Response('ok'),
+    })
+
+    server.stop()
+
+    const response = await runtime.Bun.__dispatchServeRequest(new Request('http://localhost:3001/'))
+    expect(response.status).toBe(404)
+    expect(unregistered).toEqual([3001])
+  })
+
+  it('exposes reload/ref/unref lifecycle methods', () => {
+    const vfs = new VirtualFileSystem()
+    const runtime = createBunRuntime(vfs, {}, () => {}, () => {})
+
+    const server = runtime.Bun.serve({
+      port: 3002,
+      fetch: () => new Response('ok'),
+    })
+
+    expect(typeof server.reload).toBe('function')
+    expect(typeof server.ref).toBe('function')
+    expect(typeof server.unref).toBe('function')
+
+    server.reload?.()
+    server.ref?.()
+    server.unref?.()
+    server.stop()
+  })
 })

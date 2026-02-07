@@ -41,4 +41,25 @@ describe('ModuleLoader', () => {
     const mod = await loader.load('/pkg')
     expect((mod.exports as { ok?: boolean }).ok).toBe(true)
   })
+
+  it('invokes onModuleLoad hook for custom modules', async () => {
+    const vfs = new VirtualFileSystem()
+    vfs.writeFile('/index.ts', `const native = require('native:demo'); export const value = native.value;`)
+
+    const loader = new ModuleLoader({
+      vfs,
+      transpiler: new Transpiler(),
+      runtime: createRuntime(),
+      hooks: {
+        onModuleLoad: (id) => {
+          if (id === 'native:demo') {
+            return { exports: { value: 42 } }
+          }
+        },
+      },
+    })
+
+    const mod = await loader.load('/index.ts')
+    expect((mod.exports as { value?: number }).value).toBe(42)
+  })
 })

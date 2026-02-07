@@ -1,4 +1,5 @@
 import type { VirtualFileSystem } from '@vitamin-ai/virtual-fs'
+import type { PluginManager, RuntimePlugin } from './runtime-plugins'
 
 export interface RuntimeEnv {
   env?: Record<string, string>
@@ -19,22 +20,32 @@ export interface BunServeHandle {
   port: number
   hostname?: string
   stop: () => void
+  reload?: () => void
+  ref?: () => void
+  unref?: () => void
 }
 
 export interface BunRuntimeHooks {
   onServeRegister?: (port: number) => void
   onServeUnregister?: (port: number) => void
+  onModuleLoad?: (id: string, parent?: string) => { id?: string; exports?: Record<string, unknown> } | void
 }
 
 export interface BunRuntime {
   Bun: {
     env: Record<string, string>
+    plugin: (plugin: RuntimePlugin) => void
+    plugins: RuntimePlugin[]
     file: (path: string) => {
       text: () => Promise<string>
       json: () => Promise<unknown>
       arrayBuffer: () => Promise<ArrayBuffer>
+      bytes: () => Promise<Uint8Array>
+      exists: () => Promise<boolean>
+      delete: () => Promise<void>
+      writer: () => FileSink
     }
-    write: (path: string, data: string | Uint8Array) => Promise<void>
+    write: (path: string, data: string | Uint8Array | ArrayBuffer | Blob | Response) => Promise<void>
     serve: (options: BunServeOptions) => BunServeHandle
     __dispatchServeRequest: (request: Request) => Promise<Response>
   }
@@ -59,6 +70,7 @@ export function createBunRuntime(
   onStdout: (data: Uint8Array) => void,
   onStderr: (data: Uint8Array) => void,
   hooks: BunRuntimeHooks = {},
+  pluginManager?: PluginManager,
 ): BunRuntime {
   const encoder = new TextEncoder()
   const servers = new Map<number, BunServeHandler>()
@@ -113,6 +125,9 @@ export function createBunRuntime(
         servers.delete(port)
         onServeUnregister?.(port)
       },
+      reload: () => {},
+      ref: () => {},
+      unref: () => {},
     }
   }
 
@@ -128,7 +143,14 @@ export function createBunRuntime(
   return {
     Bun: {
       env: bunEnv,
+      plugin(plugin: RuntimePlugin) {
+        pluginManager?.register(plugin)
+      },
+      get plugins() {
+        return pluginManager?.list() ?? []
+      },
       file(path: string) {
+        const sink = new FileSink(vfs, path)
         return {
           async text() {
             return vfs.readFile(path)
@@ -141,10 +163,23 @@ export function createBunRuntime(
             const bytes = vfs.readFileBytes(path)
             return bytes.slice().buffer
           },
+          async bytes() {
+            return vfs.readFileBytes(path)
+          },
+          async exists() {
+            return vfs.exists(path)
+          },
+          async delete() {
+            vfs.unlink(path)
+          },
+          writer() {
+            return sink
+          },
         }
       },
-      async write(path: string, data: string | Uint8Array) {
-        vfs.writeFile(path, data)
+      async write(path: string, data: string | Uint8Array | ArrayBuffer | Blob | Response) {
+        const payload = await normalizeWriteData(data)
+        vfs.writeFile(path, payload)
       },
       serve,
       __dispatchServeRequest: dispatchServeRequest,
@@ -191,6 +226,100 @@ export function createBunRuntime(
       timeStamp: () => {},
     },
   }
+}
+
+async function normalizeWriteData(
+  data: string | Uint8Array | ArrayBuffer | Blob | Response,
+): Promise<string | Uint8Array> {
+  if (typeof data === 'string' || data instanceof Uint8Array) {
+    return data
+  }
+
+  if (data instanceof ArrayBuffer) {
+    return new Uint8Array(data)
+  }
+
+  if (data instanceof Response) {
+    if (data.body) {
+      return await readReadableStream(data.body)
+    }
+    return new Uint8Array(await data.arrayBuffer())
+  }
+
+  if (data instanceof Blob) {
+    return new Uint8Array(await data.arrayBuffer())
+  }
+
+  return String(data)
+}
+
+class FileSink {
+  private chunks: Uint8Array[] = []
+  private closed = false
+
+  constructor(private vfs: VirtualFileSystem, private path: string) {}
+
+  async write(chunk: string | Uint8Array | ArrayBuffer | Blob) {
+    if (this.closed) throw new Error('FileSink is closed')
+    const data = await normalizeWriteChunk(chunk)
+    this.chunks.push(data)
+  }
+
+  flush() {
+    if (this.closed) return
+    if (this.chunks.length === 0) return
+    const payload = concatChunks(this.chunks)
+    this.vfs.writeFile(this.path, payload)
+    this.chunks = []
+  }
+
+  end() {
+    if (this.closed) return
+    this.flush()
+    this.closed = true
+  }
+
+  close() {
+    this.end()
+  }
+}
+
+async function normalizeWriteChunk(
+  chunk: string | Uint8Array | ArrayBuffer | Blob,
+): Promise<Uint8Array> {
+  if (typeof chunk === 'string') {
+    return new TextEncoder().encode(chunk)
+  }
+  if (chunk instanceof Uint8Array) {
+    return chunk
+  }
+  if (chunk instanceof ArrayBuffer) {
+    return new Uint8Array(chunk)
+  }
+  return new Uint8Array(await chunk.arrayBuffer())
+}
+
+async function readReadableStream(stream: ReadableStream<Uint8Array>): Promise<Uint8Array> {
+  const reader = stream.getReader()
+  const chunks: Uint8Array[] = []
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    if (value) chunks.push(value)
+  }
+  return concatChunks(chunks)
+}
+
+function concatChunks(chunks: Uint8Array[]): Uint8Array {
+  if (chunks.length === 0) return new Uint8Array(0)
+  const total = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0)
+  const merged = new Uint8Array(total)
+  let offset = 0
+  for (const chunk of chunks) {
+    merged.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+  return merged
 }
 
 function getPortFromUrl(url: string): number {

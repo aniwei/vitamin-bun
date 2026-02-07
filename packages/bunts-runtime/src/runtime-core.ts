@@ -5,6 +5,7 @@ import { Transpiler } from './transpiler'
 import { ModuleLoader } from './module-loader'
 import type { VirtualFileSystem } from '@vitamin-ai/virtual-fs'
 import type { ModuleRecord } from './module-loader'
+import type { RuntimePlugin } from './runtime-plugins'
 
 export interface RuntimeCoreOptions {
   vfs: VirtualFileSystem
@@ -13,6 +14,9 @@ export interface RuntimeCoreOptions {
   onStderr?: (data: Uint8Array) => void
   onServeRegister?: (port: number) => void
   onServeUnregister?: (port: number) => void
+  onModuleLoad?: (id: string, parent?: string) => { id?: string; exports?: Record<string, unknown> } | void
+  plugins?: RuntimePlugin[]
+  pluginTrace?: boolean
 }
 
 export class RuntimeCore {
@@ -36,7 +40,10 @@ export class RuntimeCore {
       runtimeHooks: {
         onServeRegister: options.onServeRegister,
         onServeUnregister: options.onServeUnregister,
+        onModuleLoad: options.onModuleLoad,
       },
+      plugins: options.plugins,
+      pluginTrace: options.pluginTrace,
     })
     this.evaluator = evaluator
     const coreModules = createCoreModules(options.vfs, evaluator.runtime, this)
@@ -93,6 +100,10 @@ export class RuntimeCore {
 
   async dispatchServeRequest(request: Request): Promise<Response> {
     return await this.evaluator.runtime.Bun.__dispatchServeRequest(request)
+  }
+
+  async dispose(): Promise<void> {
+    await this.evaluator.dispose()
   }
 
   private resolveEntry(command: string, args: string[]): string {

@@ -22,11 +22,16 @@ export class WasmWorker {
   private vfsCounter = 0
   private vfsRequests = new Map<number, { resolve: (snapshot: unknown) => void; reject: (err: Error) => void }>()
   private vfsRestoreRequests = new Map<number, { resolve: () => void; reject: (err: Error) => void }>()
+  private netSockets = new Map<number, WebSocket>()
+  private netProxyPort: MessagePort | null = null
+  private allowedHosts: Set<string> | null
 
   /** Whether the worker has signalled it is ready. */
   ready = false
 
-  constructor(private options: RuntimeOptions) {}
+  constructor(private options: RuntimeOptions) {
+    this.allowedHosts = options.allowedHosts ? new Set(options.allowedHosts) : null
+  }
 
   /**
    * Boot the WASM worker.  Fetches the WASM binary, creates a Web Worker,
@@ -70,6 +75,10 @@ export class WasmWorker {
       }
       if (msg.type === 'serve:response' || msg.type === 'serve:chunk' || msg.type === 'serve:end' || msg.type === 'serve:error') {
         this.forwardServeResponse(msg)
+        return
+      }
+      if (msg.type === 'net:connect' || msg.type === 'net:send' || msg.type === 'net:close') {
+        this.handleNetMessage(msg)
         return
       }
       if (msg.type === 'vfs:dump:result') {
@@ -125,6 +134,8 @@ export class WasmWorker {
         }
       })
     })
+
+    void this.registerNetProxyPort()
   }
 
   /** Execute a command inside the WASM runtime. Returns a process ID. */
@@ -198,6 +209,12 @@ export class WasmWorker {
     }
     this.servePorts.clear()
     this.serveRequests.clear()
+    for (const socket of this.netSockets.values()) {
+      socket.close()
+    }
+    this.netSockets.clear()
+    this.netProxyPort?.close()
+    this.netProxyPort = null
     this.vfsRequests.clear()
     this.vfsRestoreRequests.clear()
     this.worker?.terminate()
@@ -314,5 +331,150 @@ export class WasmWorker {
         handler(data)
       }
     }
+  }
+
+  private handleNetMessage(msg: WorkerOutMessage): void {
+    if (msg.type === 'net:connect') {
+      if (!this.isHostAllowed(msg.host)) {
+        this.postMessage({ type: 'net:error', socketId: msg.socketId, message: `Connection to ${msg.host} blocked by allowedHosts policy`, code: 'EACCES' })
+        this.postMessage({ type: 'net:closed', socketId: msg.socketId })
+        return
+      }
+      if (!Number.isFinite(msg.port) || msg.port <= 0) {
+        this.postMessage({ type: 'net:error', socketId: msg.socketId, message: 'Invalid port', code: 'EINVAL' })
+        this.postMessage({ type: 'net:closed', socketId: msg.socketId })
+        return
+      }
+      const protocol = msg.tls ? 'wss' : 'ws'
+      const url = `${protocol}://${msg.host}:${msg.port}`
+      const ws = new WebSocket(url)
+      ws.binaryType = 'arraybuffer'
+      this.netSockets.set(msg.socketId, ws)
+
+      ws.addEventListener('open', () => {
+        this.postMessage({ type: 'net:connected', socketId: msg.socketId })
+      })
+
+      ws.addEventListener('message', (event) => {
+        const data =
+          event.data instanceof ArrayBuffer
+            ? new Uint8Array(event.data)
+            : new TextEncoder().encode(String(event.data))
+        this.postMessage({ type: 'net:data', socketId: msg.socketId, data })
+      })
+
+      ws.addEventListener('close', () => {
+        this.postMessage({ type: 'net:closed', socketId: msg.socketId })
+        this.netSockets.delete(msg.socketId)
+      })
+
+      ws.addEventListener('error', () => {
+        this.postMessage({ type: 'net:error', socketId: msg.socketId, message: 'WebSocket connection error', code: 'ECONNREFUSED' })
+      })
+
+      return
+    }
+
+    if (msg.type === 'net:send') {
+      const ws = this.netSockets.get(msg.socketId)
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        this.postMessage({ type: 'net:error', socketId: msg.socketId, message: 'Socket is not connected', code: 'ENOTCONN' })
+        return
+      }
+      ws.send(msg.data)
+      return
+    }
+
+    if (msg.type === 'net:close') {
+      const ws = this.netSockets.get(msg.socketId)
+      ws?.close()
+      this.netSockets.delete(msg.socketId)
+    }
+  }
+
+  private async registerNetProxyPort(): Promise<void> {
+    if (this.netProxyPort) return
+    if (!('serviceWorker' in navigator)) return
+
+    const registration = await navigator.serviceWorker.ready
+    const controller = registration.active ?? registration.controller ?? navigator.serviceWorker.controller
+    if (!controller) return
+
+    const channel = new MessageChannel()
+    channel.port1.onmessage = (event: MessageEvent) => {
+      const msg = event.data as {
+        type: 'net:proxy:open'
+        host: string
+        port: number
+        tls: boolean
+        responsePort: MessagePort
+      }
+      if (msg.type !== 'net:proxy:open') return
+      this.handleNetProxyOpen(msg.host, msg.port, msg.tls, msg.responsePort)
+    }
+    channel.port1.start()
+
+    controller.postMessage(
+      { type: 'register-net-proxy', messagePort: channel.port2 },
+      [channel.port2],
+    )
+
+    this.netProxyPort = channel.port1
+  }
+
+  private handleNetProxyOpen(host: string, port: number, tls: boolean, portChannel: MessagePort): void {
+    if (!this.isHostAllowed(host)) {
+      portChannel.postMessage({ type: 'net:proxy:error', message: `Connection to ${host} blocked by allowedHosts policy`, code: 'EACCES' })
+      portChannel.close()
+      return
+    }
+    if (!Number.isFinite(port) || port <= 0) {
+      portChannel.postMessage({ type: 'net:proxy:error', message: 'Invalid port', code: 'EINVAL' })
+      portChannel.close()
+      return
+    }
+
+    const protocol = tls ? 'wss' : 'ws'
+    const url = `${protocol}://${host}:${port}`
+    const ws = new WebSocket(url)
+    ws.binaryType = 'arraybuffer'
+
+    portChannel.onmessage = (event: MessageEvent) => {
+      const msg = event.data as { type: 'net:proxy:send' | 'net:proxy:end' | 'net:proxy:close'; data?: Uint8Array }
+      if (msg.type === 'net:proxy:send' && msg.data) {
+        if (ws.readyState === WebSocket.OPEN) ws.send(msg.data)
+        return
+      }
+      if (msg.type === 'net:proxy:end' || msg.type === 'net:proxy:close') {
+        ws.close()
+      }
+    }
+    portChannel.start()
+
+    ws.addEventListener('open', () => {
+      portChannel.postMessage({ type: 'net:proxy:connected' })
+    })
+
+    ws.addEventListener('message', (event) => {
+      const data =
+        event.data instanceof ArrayBuffer
+          ? new Uint8Array(event.data)
+          : new TextEncoder().encode(String(event.data))
+      portChannel.postMessage({ type: 'net:proxy:data', data })
+    })
+
+    ws.addEventListener('close', () => {
+      portChannel.postMessage({ type: 'net:proxy:close' })
+      portChannel.close()
+    })
+
+    ws.addEventListener('error', () => {
+      portChannel.postMessage({ type: 'net:proxy:error', message: 'WebSocket connection error', code: 'ECONNREFUSED' })
+    })
+  }
+
+  private isHostAllowed(host: string): boolean {
+    if (!this.allowedHosts) return true
+    return this.allowedHosts.has(host)
   }
 }

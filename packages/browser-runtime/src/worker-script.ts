@@ -11,6 +11,7 @@
 
 import { RuntimeCore } from '@vitamin-ai/bunts-runtime'
 import { VirtualFileSystem, InodeKind } from '@vitamin-ai/virtual-fs'
+import { installFetchWarnings } from './fetch-warnings'
 
 // eslint-disable-next-line no-restricted-globals
 declare const self: DedicatedWorkerGlobalScope
@@ -37,6 +38,29 @@ interface ServeRequestMessage {
   url: string
   headers: Record<string, string>
   body: Uint8Array | null
+}
+
+interface NetConnectedMessage {
+  type: 'net:connected'
+  socketId: number
+}
+
+interface NetDataMessage {
+  type: 'net:data'
+  socketId: number
+  data: Uint8Array
+}
+
+interface NetClosedMessage {
+  type: 'net:closed'
+  socketId: number
+}
+
+interface NetErrorMessage {
+  type: 'net:error'
+  socketId: number
+  message: string
+  code?: string
 }
 
 interface FsWriteMessage {
@@ -80,6 +104,10 @@ type IncomingMessage =
   | InitMessage
   | ExecMessage
   | ServeRequestMessage
+  | NetConnectedMessage
+  | NetDataMessage
+  | NetClosedMessage
+  | NetErrorMessage
   | VfsDumpMessage
   | VfsRestoreMessage
   | FsWriteMessage
@@ -95,6 +123,7 @@ let vfs: VirtualFileSystem | null = null
 
 /** Pending stdin buffer — consumed by WASI fd_read on fd 0 */
 let stdinBuffer: Uint8Array[] = []
+let netProxy: NetProxyBridge | null = null
 
 // ─── Helpers ────────────────────────────────────────────────────
 
@@ -152,6 +181,11 @@ async function handleInit(msg: InitMessage): Promise<void> {
       },
     })
 
+    installFetchWarnings()
+
+    netProxy = createNetProxyBridge()
+    ;(globalThis as { __vitaminNetProxy?: NetProxyBridge }).__vitaminNetProxy = netProxy
+
     post({ type: 'ready' })
   } catch (err) {
     postError(`Init failed: ${err instanceof Error ? err.message : String(err)}`)
@@ -197,6 +231,11 @@ function handleFsMkdir(msg: FsMkdirMessage): void {
 function handleFsUnlink(msg: FsUnlinkMessage): void {
   if (!vfs) return
   if (vfs.exists(msg.path)) vfs.unlink(msg.path)
+}
+
+function handleNetMessage(msg: NetConnectedMessage | NetDataMessage | NetClosedMessage | NetErrorMessage): void {
+  if (!netProxy) return
+  netProxy.handleMessage(msg)
 }
 
 function handleVfsDump(msg: VfsDumpMessage): void {
@@ -286,6 +325,12 @@ self.onmessage = async (event: MessageEvent<IncomingMessage>) => {
     case 'fs:unlink':
       handleFsUnlink(msg)
       break
+    case 'net:connected':
+    case 'net:data':
+    case 'net:closed':
+    case 'net:error':
+      handleNetMessage(msg)
+      break
     case 'vfs:dump':
       handleVfsDump(msg)
       break
@@ -324,4 +369,168 @@ function base64ToBytes(encoded: string): Uint8Array {
     bytes[i] = binary.charCodeAt(i)
   }
   return bytes
+}
+
+type NetProxyBridge = {
+  open: (host: string, port: number, tls: boolean) => number
+  send: (socketId: number, data: Uint8Array) => void
+  close: (socketId: number) => void
+  on: (socketId: number, handler: (event: NetConnectedMessage | NetDataMessage | NetClosedMessage | NetErrorMessage) => void) => void
+  off: (socketId: number, handler: (event: NetConnectedMessage | NetDataMessage | NetClosedMessage | NetErrorMessage) => void) => void
+  handleMessage: (event: NetConnectedMessage | NetDataMessage | NetClosedMessage | NetErrorMessage) => void
+}
+
+function createNetProxyBridge(): NetProxyBridge {
+  const hasServiceWorker =
+    typeof navigator !== 'undefined' &&
+    'serviceWorker' in navigator &&
+    Boolean(navigator.serviceWorker.controller)
+
+  if (hasServiceWorker && typeof ReadableStream === 'function') {
+    return createSwNetProxyBridge()
+  }
+
+  return createDirectNetProxyBridge()
+}
+
+function createDirectNetProxyBridge(): NetProxyBridge {
+  let socketCounter = 0
+  const listeners = new Map<number, Set<(event: NetConnectedMessage | NetDataMessage | NetClosedMessage | NetErrorMessage) => void>>()
+
+  const open = (host: string, port: number, tls: boolean) => {
+    const socketId = ++socketCounter
+    post({ type: 'net:connect', socketId, host, port, tls })
+    return socketId
+  }
+
+  const send = (socketId: number, data: Uint8Array) => {
+    post({ type: 'net:send', socketId, data })
+  }
+
+  const close = (socketId: number) => {
+    post({ type: 'net:close', socketId })
+  }
+
+  const on = (socketId: number, handler: (event: NetConnectedMessage | NetDataMessage | NetClosedMessage | NetErrorMessage) => void) => {
+    if (!listeners.has(socketId)) listeners.set(socketId, new Set())
+    listeners.get(socketId)!.add(handler)
+  }
+
+  const off = (socketId: number, handler: (event: NetConnectedMessage | NetDataMessage | NetClosedMessage | NetErrorMessage) => void) => {
+    listeners.get(socketId)?.delete(handler)
+  }
+
+  const handleMessage = (event: NetConnectedMessage | NetDataMessage | NetClosedMessage | NetErrorMessage) => {
+    const set = listeners.get(event.socketId)
+    if (!set) return
+    for (const listener of Array.from(set)) {
+      listener(event)
+    }
+  }
+
+  return { open, send, close, on, off, handleMessage }
+}
+
+function createSwNetProxyBridge(): NetProxyBridge {
+  let socketCounter = 0
+  const listeners = new Map<number, Set<(event: NetConnectedMessage | NetDataMessage | NetClosedMessage | NetErrorMessage) => void>>()
+  const controllers = new Map<number, ReadableStreamDefaultController<Uint8Array>>()
+  const abortControllers = new Map<number, AbortController>()
+
+  const emit = (event: NetConnectedMessage | NetDataMessage | NetClosedMessage | NetErrorMessage) => {
+    const set = listeners.get(event.socketId)
+    if (!set) return
+    for (const listener of Array.from(set)) {
+      listener(event)
+    }
+  }
+
+  const open = (host: string, port: number, tls: boolean) => {
+    const socketId = ++socketCounter
+    const url = new URL('/@/vitamin_net_proxy', location.origin)
+    url.searchParams.set('host', host)
+    url.searchParams.set('port', String(port))
+    url.searchParams.set('tls', tls ? '1' : '0')
+
+    const abortController = new AbortController()
+    abortControllers.set(socketId, abortController)
+
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controllers.set(socketId, controller)
+      },
+    })
+
+    void fetch(url.toString(), {
+      method: 'POST',
+      body: stream,
+      signal: abortController.signal,
+      duplex: 'half',
+    } as RequestInit)
+      .then(async (response) => {
+        if (!response.ok) {
+          const code = response.headers.get('x-vitamin-error-code') ?? mapStatusToCode(response.status)
+          emit({ type: 'net:error', socketId, message: `Proxy error: ${response.status}`, code })
+          emit({ type: 'net:closed', socketId })
+          return
+        }
+
+        emit({ type: 'net:connected', socketId })
+
+        const reader = response.body?.getReader()
+        if (!reader) {
+          emit({ type: 'net:closed', socketId })
+          return
+        }
+
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          if (value) emit({ type: 'net:data', socketId, data: value })
+        }
+        emit({ type: 'net:closed', socketId })
+      })
+      .catch((err) => {
+        emit({ type: 'net:error', socketId, message: String(err), code: 'ECONNREFUSED' })
+        emit({ type: 'net:closed', socketId })
+      })
+
+    return socketId
+  }
+
+  const send = (socketId: number, data: Uint8Array) => {
+    const controller = controllers.get(socketId)
+    if (!controller) return
+    controller.enqueue(data)
+  }
+
+  const close = (socketId: number) => {
+    const controller = controllers.get(socketId)
+    controller?.close()
+    controllers.delete(socketId)
+    abortControllers.get(socketId)?.abort()
+    abortControllers.delete(socketId)
+  }
+
+  const on = (socketId: number, handler: (event: NetConnectedMessage | NetDataMessage | NetClosedMessage | NetErrorMessage) => void) => {
+    if (!listeners.has(socketId)) listeners.set(socketId, new Set())
+    listeners.get(socketId)!.add(handler)
+  }
+
+  const off = (socketId: number, handler: (event: NetConnectedMessage | NetDataMessage | NetClosedMessage | NetErrorMessage) => void) => {
+    listeners.get(socketId)?.delete(handler)
+  }
+
+  const handleMessage = (event: NetConnectedMessage | NetDataMessage | NetClosedMessage | NetErrorMessage) => {
+    emit(event)
+  }
+
+  return { open, send, close, on, off, handleMessage }
+}
+
+function mapStatusToCode(status: number): string {
+  if (status === 403) return 'EACCES'
+  if (status === 400) return 'EINVAL'
+  if (status === 503) return 'EHOSTUNREACH'
+  return 'ECONNREFUSED'
 }

@@ -2,6 +2,14 @@ export { RuntimeCore } from './runtime-core'
 export { Transpiler, type LoaderType, type TranspileResult } from './transpiler'
 export { ModuleLoader, type ModuleRecord, type ModuleLoaderOptions } from './module-loader'
 export { createBunRuntime, type BunRuntime, type RuntimeEnv } from './bun-runtime'
+export {
+	PluginManager,
+	type RuntimePlugin,
+	type ModuleResolveResult,
+	type ModuleLoadResult,
+	type PluginContext,
+	type PluginLogger,
+} from './runtime-plugins'
 export { Evaluator } from './evaluator'
 export { normalizePath, dirname, join, extname } from './path'
 export { createCoreModules, type CoreModuleMap } from './core-modules/index'

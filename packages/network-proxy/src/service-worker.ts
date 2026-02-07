@@ -9,6 +9,7 @@
 
 /** Port mappings: virtual port → MessagePort to the main thread handler. */
 const portMap = new Map<number, MessagePort>()
+let netProxyPort: MessagePort | null = null
 
 /**
  * Install event — skip waiting so the SW activates immediately.
@@ -31,7 +32,7 @@ self.addEventListener('activate', (event: Event) => {
  */
 self.addEventListener('message', (event: Event) => {
   const msg = (event as MessageEvent).data as {
-    type: 'register' | 'unregister'
+    type: 'register' | 'unregister' | 'register-net-proxy' | 'unregister-net-proxy'
     port?: number
     messagePort?: MessagePort
   }
@@ -40,6 +41,10 @@ self.addEventListener('message', (event: Event) => {
     portMap.set(msg.port, msg.messagePort)
   } else if (msg.type === 'unregister' && msg.port !== undefined) {
     portMap.delete(msg.port)
+  } else if (msg.type === 'register-net-proxy' && msg.messagePort) {
+    netProxyPort = msg.messagePort
+  } else if (msg.type === 'unregister-net-proxy') {
+    netProxyPort = null
   }
 })
 
@@ -50,6 +55,11 @@ self.addEventListener('message', (event: Event) => {
 self.addEventListener('fetch', (event: Event) => {
   const fetchEvent = event as FetchEvent
   const url = new URL(fetchEvent.request.url)
+
+  if (url.pathname.startsWith('/@/vitamin_net_proxy')) {
+    fetchEvent.respondWith(handleNetProxy(fetchEvent.request, url))
+    return
+  }
 
   const magicMatch = matchServePath(url.pathname)
   const port = magicMatch?.port ?? (parseInt(url.port, 10) || 80)
@@ -70,6 +80,99 @@ self.addEventListener('fetch', (event: Event) => {
 
   fetchEvent.respondWith(forwardToWasm(fetchEvent.request, messagePort, targetUrl))
 })
+
+async function handleNetProxy(request: Request, url: URL): Promise<Response> {
+  if (!netProxyPort) {
+    return new Response('Net proxy not registered', { status: 503 })
+  }
+
+  const host = url.searchParams.get('host') ?? ''
+  const port = Number(url.searchParams.get('port') ?? '0')
+  const tls = url.searchParams.get('tls') === '1'
+
+  if (!host || !Number.isFinite(port) || port <= 0) {
+    return new Response('Invalid host or port', { status: 400, headers: { 'x-vitamin-error-code': 'EINVAL' } })
+  }
+
+  return new Promise<Response>((resolve) => {
+    const channel = new MessageChannel()
+    let streamController: ReadableStreamDefaultController<Uint8Array> | null = null
+    let resolved = false
+
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        streamController = controller
+      },
+    })
+
+    const resolveOnce = (status: number, headers?: Record<string, string>) => {
+      if (resolved) return
+      resolved = true
+      resolve(new Response(stream, { status, headers }))
+    }
+
+    channel.port1.onmessage = (event: MessageEvent) => {
+      const res = event.data as
+        | { type: 'net:proxy:connected' }
+        | { type: 'net:proxy:data'; data: Uint8Array }
+        | { type: 'net:proxy:close' }
+        | { type: 'net:proxy:error'; message: string; code?: string }
+
+      if (res.type === 'net:proxy:connected') {
+        resolveOnce(200)
+        return
+      }
+
+      if (res.type === 'net:proxy:data' && streamController) {
+        resolveOnce(200)
+        streamController.enqueue(res.data)
+        return
+      }
+
+      if (res.type === 'net:proxy:close' && streamController) {
+        resolveOnce(200)
+        streamController.close()
+        return
+      }
+
+      if (res.type === 'net:proxy:error' && streamController) {
+        const code = res.code ?? 'ECONNREFUSED'
+        resolveOnce(502, { 'x-vitamin-error-code': code })
+        streamController.error(new Error(res.message))
+      }
+    }
+
+    channel.port1.start()
+    netProxyPort.postMessage(
+      {
+        type: 'net:proxy:open',
+        host,
+        port,
+        tls,
+        responsePort: channel.port2,
+      },
+      [channel.port2],
+    )
+
+    void pumpRequestBody(request, channel.port1)
+
+    setTimeout(() => resolveOnce(200), 2000)
+  })
+}
+
+async function pumpRequestBody(request: Request, port: MessagePort): Promise<void> {
+  if (!request.body) {
+    port.postMessage({ type: 'net:proxy:end' })
+    return
+  }
+  const reader = request.body.getReader()
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    if (value) port.postMessage({ type: 'net:proxy:send', data: value })
+  }
+  port.postMessage({ type: 'net:proxy:end' })
+}
 
 /**
  * Forward a request to the WASM runtime via a MessagePort and return the
@@ -153,11 +256,15 @@ async function forwardToWasm(
 
 function matchServePath(pathname: string): { port: number; rest: string } | null {
   const prefix = '/@/vitamin_serve__'
+
   if (!pathname.startsWith(prefix)) return null
+
   const suffix = pathname.slice(prefix.length)
   const [portText, ...rest] = suffix.split('/')
   const port = Number(portText)
+  
   if (!Number.isFinite(port)) return null
+  
   const restPath = rest.length > 0 ? `/${rest.join('/')}` : '/'
   return { port, rest: restPath }
 }

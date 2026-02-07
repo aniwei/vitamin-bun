@@ -272,6 +272,7 @@ export async function createBunContainer(
     workerUrl: options.workerUrl,
     crossOriginIsolated: globalThis.crossOriginIsolated ?? false,
     env: options.env,
+    allowedHosts: options.allowedHosts,
   })
   await worker.boot(options.files ?? {})
 

@@ -27,8 +27,23 @@ runBtn.addEventListener('click', async () => {
   output.textContent += result.stdout || ''
   output.textContent += result.stderr || ''
 
-  const installed = await container.fs.readFile('/node_modules/is-even/package.json', 'utf-8')
-  output.textContent += `\nInstalled package.json:\n${installed}\n`
+  const snapshot = await container.fs.save()
+  const encoded = snapshot.files['/node_modules/is-even/package.json']
+  if (!encoded) {
+    output.textContent += '\nPackage not found in snapshot.\n'
+  } else {
+    const installed = base64ToText(encoded)
+    output.textContent += `\nInstalled package.json:\n${installed}\n`
+  }
 
   await container.destroy()
 })
+
+function base64ToText(encoded: string): string {
+  const binary = atob(encoded)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i)
+  }
+  return new TextDecoder().decode(bytes)
+}

@@ -35,6 +35,60 @@ describe('http/https client', () => {
     server.close()
     expect(text).toBe('ok')
   })
+
+  it('supports request with headers and body', async () => {
+    let resolveReceived: ((value: { method?: string; header?: string; body: string }) => void) | null = null
+    const received = new Promise<{ method?: string; header?: string; body: string }>((resolve) => {
+      resolveReceived = resolve
+    })
+
+    const server = nodeHttp.createServer((req, res) => {
+      let body = ''
+      req.on('data', (chunk) => {
+        body += chunk.toString()
+      })
+      req.on('end', () => {
+        res.statusCode = 201
+        res.setHeader('x-echo', '1')
+        res.end('created')
+        resolveReceived?.({ method: req.method, header: req.headers['x-test'] as string | undefined, body })
+      })
+    })
+
+    await new Promise<void>((done) => server.listen(0, done))
+    const address = server.address()
+    const port = typeof address === 'object' && address ? address.port : 0
+
+    try {
+      const http = createHttpModule(undefined, 'http:')
+      const responseText = await new Promise<string>((resolveResponse, reject) => {
+        const req = http.request(
+          `http://localhost:${port}/submit`,
+          {
+            method: 'POST',
+            headers: {
+              'content-type': 'text/plain',
+              'x-test': '1',
+            },
+          },
+          (res) => {
+            res.text().then(resolveResponse).catch(reject)
+          },
+        )
+        req.on('error', reject)
+        req.write('hello')
+        req.end(' world')
+      })
+
+      expect(responseText).toBe('created')
+      const result = await received
+      expect(result.method).toBe('POST')
+      expect(result.header).toBe('1')
+      expect(result.body).toBe('hello world')
+    } finally {
+      server.close()
+    }
+  })
 })
 
 describe('http server subset', () => {
@@ -59,6 +113,35 @@ describe('http server subset', () => {
     expect(response.status).toBe(200)
     expect(response.headers.get('x-test')).toBe('ok')
     expect(body).toBe('hello')
+    server.close()
+  })
+
+  it('streams response chunks and reads request body', async () => {
+    const vfs = new VirtualFileSystem()
+    const runtime = createBunRuntime(vfs, { env: {}, cwd: '/', argv: [] }, () => {}, () => {})
+    const http = createHttpModule(runtime, 'http:')
+    const server = http.createServer((req, res) => {
+      let payload = ''
+      req.on('data', (chunk: Uint8Array) => {
+        payload += new TextDecoder().decode(chunk)
+      })
+      req.on('end', () => {
+        res.writeHead(201, { 'x-body': payload })
+        res.write('a')
+        res.write('b')
+        res.end('c')
+      })
+    })
+
+    server.listen(3124)
+    const response = await runtime.Bun.__dispatchServeRequest(
+      new Request('http://localhost:3124/stream', { method: 'POST', body: 'ping' }),
+    )
+    const body = await response.text()
+
+    expect(response.status).toBe(201)
+    expect(response.headers.get('x-body')).toBe('ping')
+    expect(body).toBe('abc')
     server.close()
   })
 })

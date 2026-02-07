@@ -10,10 +10,11 @@
 - [ ] 2.3 Implement net.connect/tls.connect and aliases
 
 ## 3. Compatibility and docs
-- [ ] 3.1 Add runtime warnings for unsupported options
-- [ ] 3.2 Update examples or docs for usage and limits
+- [x] 3.1 Add runtime warnings for unsupported options
+- [x] 3.2 Update examples or docs for usage and limits
 
 ## 4. Tests
-- [ ] 4.1 Client request/get tests (http/https)
-- [ ] 4.2 Server subset tests (request/response)
-- [ ] 4.3 net/tls proxy tests (connect/write/end)
+- [x] 4.1 Client request/get tests (http/https)
+- [x] 4.2 Server subset tests (request/response)
+- [x] 4.3 net/tls proxy tests (connect/write/end)
+- [x] 4.4 WebSocket proxy behavior tests

@@ -5,6 +5,20 @@ type SocketOptions = {
   protocols?: string | string[]
 }
 
+type NetProxyBridge = {
+  open: (host: string, port: number, tls: boolean) => number
+  send: (socketId: number, data: Uint8Array) => void
+  close: (socketId: number) => void
+  on: (socketId: number, handler: (event: NetProxyEvent) => void) => void
+  off: (socketId: number, handler: (event: NetProxyEvent) => void) => void
+}
+
+type NetProxyEvent =
+  | { type: 'net:connected'; socketId: number }
+  | { type: 'net:data'; socketId: number; data: Uint8Array }
+  | { type: 'net:closed'; socketId: number }
+  | { type: 'net:error'; socketId: number; message: string; code?: string }
+
 const warnOnceKeys = new Set<string>()
 const warnUnsupported = (key: string, message: string) => {
   if (warnOnceKeys.has(key)) return
@@ -50,6 +64,8 @@ class Socket extends SimpleEmitter {
   private ws: WebSocket | null = null
   private sendQueue: Uint8Array[] = []
   private timeoutId: ReturnType<typeof setTimeout> | null = null
+  private proxy: NetProxyBridge | null = null
+  private proxyId: number | null = null
 
   connect(url: string, protocols?: string | string[]) {
     if (typeof WebSocket !== 'function') {
@@ -87,14 +103,60 @@ class Socket extends SimpleEmitter {
     })
 
     ws.addEventListener('error', () => {
-      this.emit('error', new Error('WebSocket connection error'))
+      const err = new Error('WebSocket connection error') as Error & { code?: string }
+      err.code = 'ECONNREFUSED'
+      this.emit('error', err)
     })
+  }
+
+  connectViaProxy(host: string, port: number, tls: boolean) {
+    const proxy = getNetProxy()
+    if (!proxy) {
+      this.connecting = false
+      this.emit('error', new Error('Net proxy is not available in this runtime'))
+      this.emit('close')
+      return
+    }
+    this.proxy = proxy
+    const socketId = proxy.open(host, port, tls)
+    this.proxyId = socketId
+
+    const handler = (event: NetProxyEvent) => {
+      if (event.socketId !== socketId) return
+      if (event.type === 'net:connected') {
+        this.connecting = false
+        this.emit('connect')
+        return
+      }
+      if (event.type === 'net:data') {
+        this.bytesRead += event.data.byteLength
+        this.emit('data', event.data)
+        return
+      }
+      if (event.type === 'net:closed') {
+        this.destroyed = true
+        this.emit('close')
+        proxy.off(socketId, handler)
+        return
+      }
+      if (event.type === 'net:error') {
+        const err = new Error(event.message) as Error & { code?: string }
+        if (event.code) err.code = event.code
+        this.emit('error', err)
+      }
+    }
+
+    proxy.on(socketId, handler)
   }
 
   write(data?: string | Uint8Array) {
     if (data === undefined) return false
     const bytes = typeof data === 'string' ? new TextEncoder().encode(data) : data
     this.bytesWritten += bytes.byteLength
+    if (this.proxy && this.proxyId !== null) {
+      this.proxy.send(this.proxyId, bytes)
+      return true
+    }
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       this.sendQueue.push(bytes)
       return false
@@ -105,13 +167,21 @@ class Socket extends SimpleEmitter {
 
   end(data?: string | Uint8Array) {
     if (data !== undefined) this.write(data)
+    if (this.proxy && this.proxyId !== null) {
+      this.proxy.close(this.proxyId)
+      return this
+    }
     this.ws?.close()
     return this
   }
 
   destroy(err?: Error) {
     if (err) this.emit('error', err)
-    this.ws?.close()
+    if (this.proxy && this.proxyId !== null) {
+      this.proxy.close(this.proxyId)
+    } else {
+      this.ws?.close()
+    }
     this.destroyed = true
     return this
   }
@@ -153,8 +223,13 @@ export function createNetModule() {
     if (typeof host === 'function') socket.once('connect', host)
     const targetHost = normalized.host ?? 'localhost'
     const targetPort = normalized.port ?? 80
-    const url = `ws://${targetHost}:${targetPort}`
-    socket.connect(url, normalized.protocols)
+    const proxy = getNetProxy()
+    if (proxy) {
+      socket.connectViaProxy(targetHost, targetPort, false)
+    } else {
+      const url = `ws://${targetHost}:${targetPort}`
+      socket.connect(url, normalized.protocols)
+    }
     return socket
   }
 
@@ -171,4 +246,10 @@ function normalizeOptions(
     return { port: options, host: typeof host === 'string' ? host : undefined }
   }
   return options ?? {}
+}
+
+function getNetProxy(): NetProxyBridge | null {
+  const proxy = (globalThis as { __vitaminNetProxy?: NetProxyBridge }).__vitaminNetProxy
+  if (!proxy) return null
+  return proxy
 }

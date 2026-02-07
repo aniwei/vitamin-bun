@@ -18,6 +18,10 @@ export interface ModuleLoaderOptions {
   transpiler: Transpiler
   runtime: RuntimeGlobals
   coreModules?: Record<string, unknown>
+  hooks?: {
+    onModuleResolve?: (id: string, parent?: string) => { id?: string; stop?: boolean } | void | Promise<{ id?: string; stop?: boolean } | void>
+    onModuleLoad?: (id: string, parent?: string) => { id?: string; exports?: Record<string, unknown>; stop?: boolean } | void | Promise<{ id?: string; exports?: Record<string, unknown>; stop?: boolean } | void>
+  }
 }
 
 export class ModuleLoader {
@@ -26,15 +30,35 @@ export class ModuleLoader {
   private cache = new Map<string, ModuleRecord>()
   private runtime: RuntimeGlobals
   private coreModules: Record<string, unknown>
+  private hooks?: ModuleLoaderOptions['hooks']
 
   constructor(options: ModuleLoaderOptions) {
     this.vfs = options.vfs
     this.transpiler = options.transpiler
     this.runtime = options.runtime
     this.coreModules = options.coreModules ?? {}
+    this.hooks = options.hooks
   }
 
   async load(entry: string, parent?: string): Promise<ModuleRecord> {
+    const resolveResult = await this.hooks?.onModuleResolve?.(entry, parent)
+    if (resolveResult?.id) {
+      entry = resolveResult.id
+      if (resolveResult.stop) {
+        return { id: resolveResult.id, exports: {} }
+      }
+    }
+    const hookResult = await this.hooks?.onModuleLoad?.(entry, parent)
+    if (hookResult?.exports) {
+      const id = hookResult.id ?? entry
+      return { id, exports: hookResult.exports }
+    }
+    if (hookResult?.id) {
+      entry = hookResult.id
+      if (hookResult.stop) {
+        return { id: entry, exports: {} }
+      }
+    }
     const normalizedCore = this.normalizeCoreModuleId(entry)
     if (this.isCoreModule(normalizedCore)) {
       return { id: normalizedCore, exports: this.coreModules[normalizedCore] as Record<string, unknown> }
@@ -101,6 +125,30 @@ export class ModuleLoader {
   }
 
   loadSync(entry: string, parent?: string): ModuleRecord {
+    const resolveResult = this.hooks?.onModuleResolve?.(entry, parent)
+    if (resolveResult && typeof (resolveResult as Promise<unknown>).then === 'function') {
+      throw new Error('onModuleResolve returned a Promise in loadSync')
+    }
+    if (resolveResult?.id) {
+      entry = resolveResult.id
+      if (resolveResult.stop) {
+        return { id: resolveResult.id, exports: {} }
+      }
+    }
+    const hookResult = this.hooks?.onModuleLoad?.(entry, parent)
+    if (hookResult && typeof (hookResult as Promise<unknown>).then === 'function') {
+      throw new Error('onModuleLoad returned a Promise in loadSync')
+    }
+    if (hookResult?.exports) {
+      const id = hookResult.id ?? entry
+      return { id, exports: hookResult.exports }
+    }
+    if (hookResult?.id) {
+      entry = hookResult.id
+      if (hookResult.stop) {
+        return { id: entry, exports: {} }
+      }
+    }
     const normalizedCore = this.normalizeCoreModuleId(entry)
     if (this.isCoreModule(normalizedCore)) {
       return { id: normalizedCore, exports: this.coreModules[normalizedCore] as Record<string, unknown> }

@@ -30,13 +30,18 @@ export function createTlsModule() {
 
     const targetHost = normalized.host ?? 'localhost'
     const targetPort = normalized.port ?? 443
-    const url = `wss://${targetHost}:${targetPort}`
 
     if (connectListener) socket.once('secureConnect', connectListener)
     if (typeof host === 'function') socket.once('secureConnect', host)
 
     socket.on('connect', () => socket.emit('secureConnect'))
-    socket.connect(url, normalized.protocols)
+
+    if ('connectViaProxy' in socket && typeof socket.connectViaProxy === 'function') {
+      socket.connectViaProxy(targetHost, targetPort, true)
+    } else {
+      const url = `wss://${targetHost}:${targetPort}`
+      socket.connect(url, normalized.protocols)
+    }
     return socket
   }
 

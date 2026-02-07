@@ -7,6 +7,10 @@ export type WorkerInMessage =
   | { type: 'init'; wasmBytes?: ArrayBuffer; files: Record<string, string>; env?: Record<string, string>; sab?: SharedArrayBuffer }
   | { type: 'exec'; command: string; args: string[]; id: number }
   | { type: 'serve:request'; requestId: number; method: string; url: string; headers: Record<string, string>; body: Uint8Array | null }
+  | { type: 'net:connected'; socketId: number }
+  | { type: 'net:data'; socketId: number; data: Uint8Array }
+  | { type: 'net:closed'; socketId: number }
+  | { type: 'net:error'; socketId: number; message: string; code?: string }
   | { type: 'vfs:dump'; id: number }
   | { type: 'vfs:restore'; id: number; snapshot: VfsSnapshot }
   | { type: 'fs:write'; path: string; content: string | Uint8Array }
@@ -28,6 +32,9 @@ export type WorkerOutMessage =
   | { type: 'serve:chunk'; requestId: number; chunk: Uint8Array }
   | { type: 'serve:end'; requestId: number }
   | { type: 'serve:error'; requestId: number; message: string }
+  | { type: 'net:connect'; socketId: number; host: string; port: number; tls: boolean }
+  | { type: 'net:send'; socketId: number; data: Uint8Array }
+  | { type: 'net:close'; socketId: number }
   | { type: 'vfs:dump:result'; id: number; snapshot: VfsSnapshot }
   | { type: 'vfs:restore:result'; id: number }
 
@@ -105,4 +112,7 @@ export interface RuntimeOptions {
 
   /** Environment variables forwarded into the WASM runtime. */
   env?: Record<string, string>
+
+  /** Optional list of allowed hosts for network proxying. */
+  allowedHosts?: string[]
 }
