@@ -1,5 +1,5 @@
-export { WasmWorker } from './worker.js'
-export { SABBridge } from './sab-bridge.js'
+export { WasmWorker } from './worker'
+export { SABBridge } from './sab-bridge'
 export {
   type WorkerInMessage,
   type WorkerOutMessage,
@@ -7,4 +7,4 @@ export {
   type RuntimeOptions,
   DEFAULT_SAB_LAYOUT,
   SABRequestType,
-} from './types.js'
+} from './types'

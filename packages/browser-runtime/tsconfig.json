@@ -3,7 +3,17 @@
   "compilerOptions": {
     "outDir": "dist",
     "rootDir": "src",
-    "composite": true
+    "composite": true,
+    "paths": {
+      "@vitamin-ai/wasm-host": ["../wasm-host/src/index.ts"],
+      "@vitamin-ai/virtual-fs": ["../virtual-fs/src/index.ts"],
+      "@vitamin-ai/bunts-runtime": ["../bunts-runtime/src/index.ts"]
+    }
   },
-  "include": ["src"]
+  "include": ["src"],
+  "references": [
+    { "path": "../wasm-host" },
+    { "path": "../virtual-fs" },
+    { "path": "../bunts-runtime" }
+  ]
 }

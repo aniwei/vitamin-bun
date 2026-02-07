@@ -27,32 +27,24 @@ export class WasmWorker {
    * and sets up the SAB bridge if cross-origin isolation is available.
    */
   async boot(files: Record<string, string> = {}): Promise<void> {
-    const wasmResponse = await fetch(this.options.wasmUrl)
-    const wasmBytes = await wasmResponse.arrayBuffer()
+    let wasmBytes: ArrayBuffer | undefined
+    if (this.options.wasmUrl) {
+      const wasmResponse = await fetch(this.options.wasmUrl)
+      wasmBytes = await wasmResponse.arrayBuffer()
+    }
 
     // If cross-origin isolated, set up SAB bridge.
     if (this.options.crossOriginIsolated ?? crossOriginIsolated) {
       this.sabBridge = new SABBridge()
     }
 
-    // Create worker from an inline script that will receive the WASM bytes.
-    const workerBlob = new Blob(
-      [
-        `
-        // Worker entry point — will be replaced with a real worker script
-        // that imports @vitamin-ai/wasm-host and instantiates the WASM module.
-        self.onmessage = function(event) {
-          const msg = event.data;
-          if (msg.type === 'init') {
-            self.postMessage({ type: 'ready' });
-          }
-        };
-        `,
-      ],
-      { type: 'application/javascript' },
-    )
-    const workerUrl = URL.createObjectURL(workerBlob)
-    this.worker = new Worker(workerUrl)
+    // Resolve worker script URL.
+    // Priority: explicit workerUrl > bundler-resolved import.meta.url fallback
+    const scriptUrl = this.options.workerUrl
+      ? new URL(this.options.workerUrl)
+      : new URL('./worker-script.js', import.meta.url)
+
+    this.worker = new Worker(scriptUrl, { type: 'module' })
 
     // Set up message routing.
     this.worker.onmessage = (event: MessageEvent) => {
@@ -63,17 +55,39 @@ export class WasmWorker {
       this.emit(msg.type, msg)
     }
 
-    // Send init message with WASM binary.
+    this.worker.onerror = (event: ErrorEvent) => {
+      this.emit('error', { type: 'error', message: event.message ?? 'Worker error' })
+    }
+
+    // Send init message with WASM binary, initial files, and env.
     const initMsg: WorkerInMessage = {
       type: 'init',
       wasmBytes,
       files,
+      env: this.options.env,
+      sab: this.sabBridge?.sab,
     }
-    this.worker.postMessage(initMsg, [wasmBytes])
+
+    // Transfer the ArrayBuffer to avoid copying.
+    const transferables: Transferable[] = wasmBytes ? [wasmBytes] : []
+    this.worker.postMessage(initMsg, transferables)
 
     // Wait for ready signal.
-    await new Promise<void>((resolve) => {
-      this.on('ready', () => resolve())
+    await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error('Worker boot timed out after 30 s'))
+      }, 30_000)
+
+      this.on('ready', () => {
+        clearTimeout(timeout)
+        resolve()
+      })
+      this.on('error', (msg) => {
+        clearTimeout(timeout)
+        if ('message' in msg) {
+          reject(new Error(msg.message as string))
+        }
+      })
     })
   }
 

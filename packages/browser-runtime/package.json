@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@vitamin-ai/wasm-host": "0.0.1"
+    "@vitamin-ai/wasm-host": "workspace:*",
+    "@vitamin-ai/bunts-runtime": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.7.0",

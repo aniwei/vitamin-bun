@@ -1,5 +1,6 @@
 import { VirtualFileSystem } from '@vitamin-ai/virtual-fs'
 import { WasmWorker } from '@vitamin-ai/browser-runtime'
+import { HttpProxy, WebSocketProxy } from '@vitamin-ai/network-proxy'
 import type {
   ContainerOptions,
   ExecResult,
@@ -44,15 +45,21 @@ export class Readable {
 class BunContainerImpl implements BunContainer {
   private worker: WasmWorker
   private vfs: VirtualFileSystem
+  private httpProxy: HttpProxy
+  private wsProxy: WebSocketProxy
 
   readonly fs: ContainerFS
 
   constructor(
     worker: WasmWorker,
     vfs: VirtualFileSystem,
+    httpProxy: HttpProxy,
+    wsProxy: WebSocketProxy,
   ) {
     this.worker = worker
     this.vfs = vfs
+    this.httpProxy = httpProxy
+    this.wsProxy = wsProxy
 
     // Expose a simplified filesystem API.
     this.fs = {
@@ -223,14 +230,35 @@ export async function createBunContainer(
     }
   }
 
+  // Create network proxies.
+  const httpProxy = new HttpProxy({
+    allowedHosts: options.allowedHosts,
+  })
+  const wsProxy = new WebSocketProxy()
+
+  // Optionally register Service Worker for localhost interception.
+  if (options.serviceWorkerUrl && 'serviceWorker' in navigator) {
+    try {
+      await navigator.serviceWorker.register(options.serviceWorkerUrl, {
+        scope: '/',
+      })
+      await navigator.serviceWorker.ready
+    } catch {
+      // Service Worker registration is best-effort.
+      console.warn('[vitamin] Service Worker registration failed')
+    }
+  }
+
   // Boot the WASM worker.
   const worker = new WasmWorker({
     wasmUrl: options.wasmUrl,
+    workerUrl: options.workerUrl,
     crossOriginIsolated: globalThis.crossOriginIsolated ?? false,
+    env: options.env,
   })
   await worker.boot(options.files ?? {})
 
-  return new BunContainerImpl(worker, vfs)
+  return new BunContainerImpl(worker, vfs, httpProxy, wsProxy)
 }
 
 // ---------------------------------------------------------------------------

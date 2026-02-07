@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vitamin Bun — Code Editor</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #0f0f23;
+      color: #cdd6f4;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: .75rem 1rem;
+      background: #181825;
+      border-bottom: 1px solid #313244;
+    }
+    header h1 { font-size: 1rem; font-weight: 600; }
+    #status {
+      font-size: .85rem;
+      opacity: .7;
+    }
+    #run-btn {
+      background: #a6e3a1;
+      color: #1e1e2e;
+      border: none;
+      padding: .5rem 1.25rem;
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: .9rem;
+    }
+    #run-btn:hover { background: #94e2d5; }
+    #run-btn:disabled { opacity: .5; cursor: not-allowed; }
+    .panels {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+    .panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+    .panel-header {
+      padding: .5rem .75rem;
+      font-size: .8rem;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      background: #181825;
+      border-bottom: 1px solid #313244;
+      opacity: .7;
+    }
+    .panel + .panel { border-left: 1px solid #313244; }
+    #editor {
+      flex: 1;
+      background: #1e1e2e;
+      color: #cdd6f4;
+      border: none;
+      padding: 1rem;
+      font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+      font-size: .9rem;
+      line-height: 1.5;
+      resize: none;
+      outline: none;
+      tab-size: 2;
+    }
+    #output {
+      flex: 1;
+      background: #1e1e2e;
+      color: #a6adc8;
+      padding: 1rem;
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: .85rem;
+      line-height: 1.5;
+      overflow: auto;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🧪 Vitamin Bun — Playground</h1>
+    <span id="status">Loading…</span>
+    <button id="run-btn" disabled>▶ Run (⌘↵)</button>
+  </header>
+  <div class="panels">
+    <div class="panel">
+      <div class="panel-header">Editor</div>
+      <textarea id="editor" spellcheck="false"></textarea>
+    </div>
+    <div class="panel">
+      <div class="panel-header">Output</div>
+      <pre id="output">Waiting for runtime…</pre>
+    </div>
+  </div>
+
+  <script type="module" src="./main.ts"></script>
+</body>
+</html>

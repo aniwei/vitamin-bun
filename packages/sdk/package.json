@@ -11,9 +11,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@vitamin-ai/browser-runtime": "0.0.1",
-    "@vitamin-ai/virtual-fs": "0.0.1",
-    "@vitamin-ai/network-proxy": "0.0.1"
+    "@vitamin-ai/browser-runtime": "workspace:*",
+    "@vitamin-ai/virtual-fs": "workspace:*",
+    "@vitamin-ai/network-proxy": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.7.0",

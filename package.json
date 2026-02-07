@@ -8,9 +8,7 @@
     "build": "turbo run build",
     "test": "turbo run test",
     "lint": "turbo run lint",
-    "typecheck": "turbo run typecheck",
-    "bun:zig:setup": "cmake -DZIG_PATH=vendor/bun/vendor/zig -DZIG_COMMIT=c1423ff3fc7064635773a4a4616c5bf986eb00fe -P vendor/bun/cmake/scripts/DownloadZig.cmake",
-    "bun:wasm": "cd vendor/bun && ./vendor/zig/zig.exe build -Dtarget=wasm32-wasi"
+    "typecheck": "turbo run typecheck"
   },
   "devDependencies": {
     "typescript": "^5.7.0",

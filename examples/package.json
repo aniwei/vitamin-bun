@@ -1,0 +1,21 @@
+{
+  "name": "@vitamin-ai/examples",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:01": "vite --open /01-hello-world/",
+    "dev:04": "vite --open /04-code-editor/"
+  },
+  "dependencies": {
+    "@vitamin-ai/sdk": "workspace:*",
+    "@vitamin-ai/wasm-host": "workspace:*",
+    "@vitamin-ai/virtual-fs": "workspace:*",
+    "@vitamin-ai/browser-runtime": "workspace:*",
+    "@vitamin-ai/network-proxy": "workspace:*"
+  },
+  "devDependencies": {
+    "vite": "^6.0.0",
+    "typescript": "^5.7.0"
+  }
+}

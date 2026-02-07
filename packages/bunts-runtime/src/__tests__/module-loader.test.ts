@@ -1,0 +1,44 @@
+import { describe, it, expect } from 'vitest'
+import { VirtualFileSystem } from '../../../virtual-fs/src/index.js'
+import { ModuleLoader } from '../module-loader.js'
+import { Transpiler } from '../transpiler.js'
+
+function createRuntime() {
+  return {
+    Bun: {},
+    process: { env: {}, argv: [], cwd: () => '/' },
+    console,
+  }
+}
+
+describe('ModuleLoader', () => {
+  it('loads and executes a module with dependencies', async () => {
+    const vfs = new VirtualFileSystem()
+    vfs.writeFile('/dep.ts', 'export const value: number = 41 + 1')
+    vfs.writeFile('/index.ts', `import { value } from './dep'; export const result = value;`)
+
+    const loader = new ModuleLoader({
+      vfs,
+      transpiler: new Transpiler(),
+      runtime: createRuntime(),
+    })
+
+    const mod = await loader.load('/index.ts')
+    expect((mod.exports as { result?: number }).result).toBe(42)
+  })
+
+  it('resolves index files', async () => {
+    const vfs = new VirtualFileSystem()
+    vfs.mkdirp('/pkg')
+    vfs.writeFile('/pkg/index.ts', 'export const ok = true')
+
+    const loader = new ModuleLoader({
+      vfs,
+      transpiler: new Transpiler(),
+      runtime: createRuntime(),
+    })
+
+    const mod = await loader.load('/pkg')
+    expect((mod.exports as { ok?: boolean }).ok).toBe(true)
+  })
+})

@@ -6,8 +6,18 @@ import type { Readable } from './container.js'
 
 /** Options passed to `createBunContainer()`. */
 export interface ContainerOptions {
-  /** URL to the Bun WASM binary (`.wasm` file). */
-  wasmUrl: string
+  /** URL to the Bun WASM binary (`.wasm` file). Optional for BunTS runtime. */
+  wasmUrl?: string
+  /**
+   * URL to the worker script (module worker).
+   * If not provided, browser-runtime will attempt to use a default path.
+   */
+  workerUrl?: string | URL
+  /**
+   * URL to the Service Worker script for intercepting localhost fetch requests.
+   * If provided, the SDK will register the Service Worker automatically.
+   */
+  serviceWorkerUrl?: string
   /**
    * Initial files to populate the virtual filesystem.
    * Keys are file paths, values are file content strings.
@@ -22,6 +32,11 @@ export interface ContainerOptions {
   persistence?: 'memory' | 'indexeddb' | 'opfs'
   /** Environment variables available to the Bun process. */
   env?: Record<string, string>
+  /**
+   * Hostnames that the container is allowed to make network requests to.
+   * If omitted, all hosts are allowed.
+   */
+  allowedHosts?: string[]
 }
 
 /** Result of running a command to completion. */

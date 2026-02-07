@@ -21,6 +21,7 @@ a.out
 target
 .scripts
 .direnv/
+packages/bun-wasm/wasm/
 
 # Local dev files
 opencode-dev

@@ -1,86 +1,189 @@
-import type { JSContextBridge } from './types.js'
+import type { JSHandle, JSContextImports, WasmMemoryAccess } from './types.js'
 
 /**
- * Handle-based bridge between the WASM runtime and the browser's JavaScript
- * engine. Instead of embedding a full JS engine in WASM, we keep a handle
- * table on the host side and let the WASM binary reference JS objects via
- * integer handles.
+ * JS Context Bridge — maps WASM integer handles to host JS objects.
+ *
+ * This is the mechanism by which WASM code can reference and manipulate
+ * JavaScript objects without direct pointer access across the WASM boundary.
+ *
+ * Corresponds to TECHNICAL_DESIGN.md §3.3 "JS Context Bridge".
  */
-export class BrowserJSContext implements JSContextBridge {
-  /** Map of integer handle → JS value. */
-  private handles = new Map<number, unknown>()
-  /** Next available handle number. */
-  private nextHandle = 1
+export class JSContextBridge implements JSContextImports {
+  /** Handle → JS value mapping */
+  private handleTable = new Map<JSHandle, unknown>()
+
+  /** Pre-allocated handles for common values */
+  private static readonly HANDLE_UNDEFINED = 0
+  private static readonly HANDLE_NULL = 1
+  private static readonly HANDLE_TRUE = 2
+  private static readonly HANDLE_FALSE = 3
+  private static readonly HANDLE_GLOBAL = 4
+  private static readonly FIRST_DYNAMIC_HANDLE = 5
+
+  private nextHandle = JSContextBridge.FIRST_DYNAMIC_HANDLE
+  private mem!: WasmMemoryAccess
 
   constructor() {
-    // Pre-populate handle 0 as `undefined`.
-    this.handles.set(0, undefined)
+    // Pre-populate well-known values
+    this.handleTable.set(JSContextBridge.HANDLE_UNDEFINED, undefined)
+    this.handleTable.set(JSContextBridge.HANDLE_NULL, null)
+    this.handleTable.set(JSContextBridge.HANDLE_TRUE, true)
+    this.handleTable.set(JSContextBridge.HANDLE_FALSE, false)
+    this.handleTable.set(
+      JSContextBridge.HANDLE_GLOBAL,
+      typeof globalThis !== 'undefined' ? globalThis : self,
+    )
   }
 
-  /** Allocate a new handle for a JS value. */
-  private allocate(value: unknown): number {
+  /** Bind WASM memory for string reading */
+  setMemory(mem: WasmMemoryAccess): void {
+    this.mem = mem
+  }
+
+  // ─── Handle Management ──────────────────────────────────────
+
+  /** Wrap a JS value into a handle */
+  private toHandle(value: unknown): JSHandle {
+    // Return pre-allocated handles for common values
+    if (value === undefined) return JSContextBridge.HANDLE_UNDEFINED
+    if (value === null) return JSContextBridge.HANDLE_NULL
+    if (value === true) return JSContextBridge.HANDLE_TRUE
+    if (value === false) return JSContextBridge.HANDLE_FALSE
+
+    // Check if this exact value already has a handle (reference equality)
+    for (const [handle, existing] of this.handleTable) {
+      if (existing === value && handle >= JSContextBridge.FIRST_DYNAMIC_HANDLE) {
+        return handle
+      }
+    }
+
     const handle = this.nextHandle++
-    this.handles.set(handle, value)
+    this.handleTable.set(handle, value)
     return handle
   }
 
-  /** Retrieve the JS value behind a handle. */
-  private deref(handle: number): unknown {
-    if (!this.handles.has(handle)) {
+  /** Unwrap a handle to get the JS value */
+  private fromHandle(handle: JSHandle): unknown {
+    if (!this.handleTable.has(handle)) {
       throw new Error(`Invalid JS handle: ${handle}`)
     }
-    return this.handles.get(handle)
+    return this.handleTable.get(handle)
   }
 
-  eval(code: string): number {
-    // Using indirect eval so that the code runs in global scope.
-    // eslint-disable-next-line no-eval
-    const result = (0, eval)(code)
-    return this.allocate(result)
+  // ─── Host Imports (called from WASM) ────────────────────────
+
+  js_context_eval(codePtr: number, codeLen: number): JSHandle {
+    const code = this.mem.readString(codePtr, codeLen)
+    try {
+      // Use indirect eval (global scope) via Function constructor
+      // This is safer than direct eval and runs in global scope
+      const result = new Function(`return (${code})`)()
+      return this.toHandle(result)
+    } catch (e) {
+      // Return the error as a handle so WASM can inspect it
+      return this.toHandle(e)
+    }
   }
 
-  call(fnHandle: number, argHandles: number[]): number {
-    const fn = this.deref(fnHandle)
+  js_context_call(
+    fnHandle: JSHandle,
+    thisHandle: JSHandle,
+    argsPtr: number,
+    argsLen: number,
+  ): JSHandle {
+    const fn = this.fromHandle(fnHandle)
+    const thisArg = this.fromHandle(thisHandle)
+
     if (typeof fn !== 'function') {
-      throw new TypeError(`Handle ${fnHandle} is not a function`)
+      return this.toHandle(new TypeError('Not a function'))
     }
-    const args = argHandles.map((h) => this.deref(h))
-    // Functions are called with `undefined` as receiver. In non-strict mode
-    // this falls back to the global object; in strict mode it stays undefined.
-    const result = Reflect.apply(fn as Function, undefined, args)
-    return this.allocate(result)
-  }
 
-  getProperty(objHandle: number, key: string): number {
-    const obj = this.deref(objHandle)
-    if (obj === null || obj === undefined) {
-      throw new TypeError(`Cannot get property '${key}' of ${obj}`)
+    // Read argument handles from memory
+    const args: unknown[] = []
+    for (let i = 0; i < argsLen; i++) {
+      const argHandle = this.mem.view.getInt32(argsPtr + i * 4, true)
+      args.push(this.fromHandle(argHandle))
     }
-    const value = Reflect.get(obj as object, key)
-    return this.allocate(value)
-  }
 
-  setProperty(objHandle: number, key: string, valueHandle: number): void {
-    const obj = this.deref(objHandle)
-    if (obj === null || obj === undefined) {
-      throw new TypeError(`Cannot set property '${key}' of ${obj}`)
+    try {
+      const result = Reflect.apply(fn, thisArg, args)
+      return this.toHandle(result)
+    } catch (e) {
+      return this.toHandle(e)
     }
-    const value = this.deref(valueHandle)
-    Reflect.set(obj as object, key, value)
   }
 
-  createObject(): number {
-    return this.allocate({})
-  }
+  js_context_get_property(
+    objHandle: JSHandle,
+    namePtr: number,
+    nameLen: number,
+  ): JSHandle {
+    const obj = this.fromHandle(objHandle) as Record<string, unknown>
+    const name = this.mem.readString(namePtr, nameLen)
 
-  typeOf(handle: number): string {
-    return typeof this.deref(handle)
-  }
-
-  release(handle: number): void {
-    // Handle 0 (undefined) is never released.
-    if (handle !== 0) {
-      this.handles.delete(handle)
+    try {
+      const value = Reflect.get(obj, name)
+      return this.toHandle(value)
+    } catch (e) {
+      return this.toHandle(e)
     }
+  }
+
+  js_context_set_property(
+    objHandle: JSHandle,
+    namePtr: number,
+    nameLen: number,
+    valueHandle: JSHandle,
+  ): void {
+    const obj = this.fromHandle(objHandle) as Record<string, unknown>
+    const name = this.mem.readString(namePtr, nameLen)
+    const value = this.fromHandle(valueHandle)
+
+    Reflect.set(obj, name, value)
+  }
+
+  js_context_create_object(): JSHandle {
+    return this.toHandle(Object.create(null))
+  }
+
+  js_context_typeof(handle: JSHandle): JSHandle {
+    const value = this.fromHandle(handle)
+    return this.toHandle(typeof value)
+  }
+
+  js_context_release(handle: JSHandle): void {
+    // Don't release pre-allocated handles
+    if (handle >= JSContextBridge.FIRST_DYNAMIC_HANDLE) {
+      this.handleTable.delete(handle)
+    }
+  }
+
+  js_context_global(): JSHandle {
+    return JSContextBridge.HANDLE_GLOBAL
+  }
+
+  // ─── Build import object ────────────────────────────────────
+
+  /** Return a host-imports object for WebAssembly.instantiate */
+  getImports(): { env: JSContextImports } {
+    return {
+      env: {
+        js_context_eval: this.js_context_eval.bind(this),
+        js_context_call: this.js_context_call.bind(this),
+        js_context_get_property: this.js_context_get_property.bind(this),
+        js_context_set_property: this.js_context_set_property.bind(this),
+        js_context_create_object: this.js_context_create_object.bind(this),
+        js_context_typeof: this.js_context_typeof.bind(this),
+        js_context_release: this.js_context_release.bind(this),
+        js_context_global: this.js_context_global.bind(this),
+      },
+    }
+  }
+
+  // ─── Diagnostics ────────────────────────────────────────────
+
+  /** Number of live handles (useful for leak detection) */
+  get liveHandleCount(): number {
+    return this.handleTable.size - JSContextBridge.FIRST_DYNAMIC_HANDLE
   }
 }

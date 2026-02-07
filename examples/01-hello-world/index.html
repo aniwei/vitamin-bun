@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vitamin Bun — Hello World</title>
+  <!-- COOP/COEP headers are required for SharedArrayBuffer support.
+       In production, configure your server to send these headers.
+       For local dev, Vite plugin or a custom server can inject them. -->
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 720px; margin: 2rem auto; }
+    pre  { background: #1e1e2e; color: #cdd6f4; padding: 1rem; border-radius: 8px; overflow-x: auto; }
+    button { padding: .5rem 1rem; font-size: 1rem; cursor: pointer; }
+    #output { white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <h1>🧪 Hello World — Vitamin Bun</h1>
+  <p>Run a simple TypeScript file inside a browser-based Bun container.</p>
+  <button id="run">▶ Run</button>
+  <pre id="output">Click "Run" to start…</pre>
+
+  <script type="module" src="./main.ts"></script>
+</body>
+</html>

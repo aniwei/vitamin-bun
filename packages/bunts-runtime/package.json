@@ -1,0 +1,20 @@
+{
+  "name": "@vitamin-ai/bunts-runtime",
+  "version": "0.0.1",
+  "description": "Pure TypeScript Bun runtime core for the browser",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@vitamin-ai/virtual-fs": "workspace:*",
+    "typescript": "^5.7.0"
+  },
+  "devDependencies": {
+    "vitest": "^3.0.0"
+  }
+}

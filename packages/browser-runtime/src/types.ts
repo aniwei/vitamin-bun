@@ -4,7 +4,7 @@
 
 /** Messages sent from the main thread to the WASM worker. */
 export type WorkerInMessage =
-  | { type: 'init'; wasmBytes: ArrayBuffer; files: Record<string, string> }
+  | { type: 'init'; wasmBytes?: ArrayBuffer; files: Record<string, string>; env?: Record<string, string>; sab?: SharedArrayBuffer }
   | { type: 'exec'; command: string; args: string[]; id: number }
   | { type: 'stdin'; data: Uint8Array }
   | { type: 'kill'; id: number }
@@ -71,8 +71,19 @@ export enum SABRequestType {
 
 /** Runtime configuration. */
 export interface RuntimeOptions {
-  /** URL to the Bun WASM binary. */
-  wasmUrl: string
+  /** URL to the Bun WASM binary (optional for BunTS). */
+  wasmUrl?: string
+
+  /**
+   * URL to the worker script (module worker).
+   * If not provided, falls back to `new URL('./worker-script.js', import.meta.url)`.
+   * Bundlers like Vite / Webpack 5 / esbuild will resolve this automatically.
+   */
+  workerUrl?: string | URL
+
   /** Whether SharedArrayBuffer is available (requires COOP/COEP headers). */
   crossOriginIsolated?: boolean
+
+  /** Environment variables forwarded into the WASM runtime. */
+  env?: Record<string, string>
 }
