@@ -36,4 +36,16 @@ describe('wrapFetchWithWarnings', () => {
 
     expect(warn).toHaveBeenCalledTimes(2)
   })
+
+  it('warns on fetch.preconnect', () => {
+    const warn = vi.fn()
+    const fetchMock = vi.fn(async () => 'ok')
+    const wrapped = wrapFetchWithWarnings(fetchMock as unknown as typeof fetch, warn)
+
+    wrapped.preconnect?.('https://example.com')
+    wrapped.preconnect?.('https://example.com')
+
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(warn).toHaveBeenCalledWith('fetch.preconnect is not supported in browser runtime')
+  })
 })

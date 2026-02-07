@@ -8,7 +8,7 @@ import type {
   ContainerFS,
   BunContainer,
   VfsSnapshot,
-} from './types.js'
+} from './types'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -232,10 +232,11 @@ export async function createBunContainer(
   options: ContainerOptions,
 ): Promise<BunContainer> {
   const vfs = new VirtualFileSystem()
+  const initialFiles = withSourceMapUrls(options.files ?? {}, options.rootDir)
 
   // Seed the filesystem with initial files.
-  if (options.files) {
-    for (const [path, content] of Object.entries(options.files)) {
+  if (Object.keys(initialFiles).length > 0) {
+    for (const [path, content] of Object.entries(initialFiles)) {
       // Ensure parent directories exist.
       const parts = path.split('/')
       parts.pop()
@@ -274,7 +275,7 @@ export async function createBunContainer(
     env: options.env,
     allowedHosts: options.allowedHosts,
   })
-  await worker.boot(options.files ?? {})
+  await worker.boot(initialFiles)
 
   if (options.onServeStart) {
     worker.on('serve:register', (msg) => {
@@ -310,4 +311,28 @@ function base64ToBytes(encoded: string): Uint8Array {
     bytes[i] = binary.charCodeAt(i)
   }
   return bytes
+}
+
+function withSourceMapUrls(
+  files: Record<string, string>,
+  rootDir?: string,
+): Record<string, string> {
+  const normalizedRoot = normalizeRootDir(rootDir ?? 'root')
+  const result: Record<string, string> = {}
+  for (const [path, content] of Object.entries(files)) {
+    const fileName = path.split('/').filter(Boolean).pop() ?? 'index.ts'
+    result[path] = appendSourceMapUrl(content, normalizedRoot, fileName)
+  }
+  return result
+}
+
+function appendSourceMapUrl(content: string, rootDir: string, fileName: string): string {
+  if (content.includes('sourceMappingURL=')) return content
+  const suffix = `//# sourceMappingURL=@vitamin-ai/${rootDir}/${fileName}`
+  if (content.endsWith('\n')) return content + suffix + '\n'
+  return content + '\n' + suffix + '\n'
+}
+
+function normalizeRootDir(rootDir: string): string {
+  return rootDir.split('/').filter(Boolean).join('/') || 'root'
 }

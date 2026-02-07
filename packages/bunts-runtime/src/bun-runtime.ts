@@ -29,6 +29,26 @@ export interface BunRuntimeHooks {
   onServeRegister?: (port: number) => void
   onServeUnregister?: (port: number) => void
   onModuleLoad?: (id: string, parent?: string) => { id?: string; exports?: Record<string, unknown> } | void
+  onSpawn?: (options: BunSpawnOptions) => BunSpawnResult
+  onSpawnSync?: (options: BunSpawnOptions) => BunSpawnSyncResult
+}
+
+export type BunSpawnOptions = {
+  cmd: string[]
+  env?: Record<string, string>
+}
+
+export type BunSpawnResult = {
+  pid: number
+  stdout: Uint8Array
+  stderr: Uint8Array
+  exited: Promise<number>
+}
+
+export type BunSpawnSyncResult = {
+  exitCode: number
+  stdout: Uint8Array
+  stderr: Uint8Array
 }
 
 export interface BunRuntime {
@@ -41,12 +61,15 @@ export interface BunRuntime {
       json: () => Promise<unknown>
       arrayBuffer: () => Promise<ArrayBuffer>
       bytes: () => Promise<Uint8Array>
+      stream: () => ReadableStream<Uint8Array>
       exists: () => Promise<boolean>
       delete: () => Promise<void>
-      writer: () => FileSink
+      writer: (options?: FileSinkOptions) => FileSink
     }
-    write: (path: string, data: string | Uint8Array | ArrayBuffer | Blob | Response) => Promise<void>
+    write: (path: string, data: string | Uint8Array | ArrayBuffer | Blob | Response | ReadableStream<Uint8Array>) => Promise<void>
     serve: (options: BunServeOptions) => BunServeHandle
+    spawn: (options: BunSpawnOptions) => BunSpawnResult
+    spawnSync: (options: BunSpawnOptions) => BunSpawnSyncResult
     __dispatchServeRequest: (request: Request) => Promise<Response>
   }
   process: {
@@ -150,7 +173,6 @@ export function createBunRuntime(
         return pluginManager?.list() ?? []
       },
       file(path: string) {
-        const sink = new FileSink(vfs, path)
         return {
           async text() {
             return vfs.readFile(path)
@@ -166,22 +188,57 @@ export function createBunRuntime(
           async bytes() {
             return vfs.readFileBytes(path)
           },
+          stream() {
+            const bytes = vfs.readFileBytes(path)
+            return new ReadableStream<Uint8Array>({
+              start(controller) {
+                controller.enqueue(bytes)
+                controller.close()
+              },
+            })
+          },
           async exists() {
             return vfs.exists(path)
           },
           async delete() {
             vfs.unlink(path)
           },
-          writer() {
-            return sink
+          writer(options?: FileSinkOptions) {
+            return new FileSink(vfs, path, options)
           },
         }
       },
-      async write(path: string, data: string | Uint8Array | ArrayBuffer | Blob | Response) {
+      async write(
+        path: string,
+        data: string | Uint8Array | ArrayBuffer | Blob | Response | ReadableStream<Uint8Array>,
+      ) {
         const payload = await normalizeWriteData(data)
         vfs.writeFile(path, payload)
       },
       serve,
+      spawn(options: BunSpawnOptions) {
+        if (!hooks.onSpawn) {
+          console.warn('Bun.spawn is not available in this runtime')
+          return {
+            pid: -1,
+            stdout: new Uint8Array(),
+            stderr: new Uint8Array(),
+            exited: Promise.resolve(1),
+          }
+        }
+        return hooks.onSpawn(options)
+      },
+      spawnSync(options: BunSpawnOptions) {
+        if (!hooks.onSpawnSync) {
+          console.warn('Bun.spawnSync is not available in this runtime')
+          return {
+            exitCode: 1,
+            stdout: new Uint8Array(),
+            stderr: new Uint8Array(),
+          }
+        }
+        return hooks.onSpawnSync(options)
+      },
       __dispatchServeRequest: dispatchServeRequest,
     },
     process: {
@@ -228,8 +285,13 @@ export function createBunRuntime(
   }
 }
 
+type FileSinkOptions = {
+  append?: boolean
+  highWaterMark?: number
+}
+
 async function normalizeWriteData(
-  data: string | Uint8Array | ArrayBuffer | Blob | Response,
+  data: string | Uint8Array | ArrayBuffer | Blob | Response | ReadableStream<Uint8Array>,
 ): Promise<string | Uint8Array> {
   if (typeof data === 'string' || data instanceof Uint8Array) {
     return data
@@ -237,6 +299,10 @@ async function normalizeWriteData(
 
   if (data instanceof ArrayBuffer) {
     return new Uint8Array(data)
+  }
+
+  if (isReadableStream(data)) {
+    return await readReadableStream(data)
   }
 
   if (data instanceof Response) {
@@ -253,24 +319,67 @@ async function normalizeWriteData(
   return String(data)
 }
 
+function isReadableStream(value: unknown): value is ReadableStream<Uint8Array> {
+  if (!value || typeof value !== 'object') return false
+  return typeof (value as ReadableStream<Uint8Array>).getReader === 'function'
+}
+
 class FileSink {
   private chunks: Uint8Array[] = []
   private closed = false
+  private bufferedBytes = 0
+  private readyPromise: Promise<void> = Promise.resolve()
+  private readyResolve: (() => void) | null = null
+  private append: boolean
+  private highWaterMark: number
 
-  constructor(private vfs: VirtualFileSystem, private path: string) {}
+  constructor(
+    private vfs: VirtualFileSystem,
+    private path: string,
+    options: FileSinkOptions = {},
+  ) {
+    this.append = options.append ?? false
+    this.highWaterMark = options.highWaterMark ?? 64 * 1024
+  }
 
-  async write(chunk: string | Uint8Array | ArrayBuffer | Blob) {
+  get ready() {
+    return this.readyPromise
+  }
+
+  async write(chunk: string | Uint8Array | ArrayBuffer | Blob): Promise<boolean> {
     if (this.closed) throw new Error('FileSink is closed')
     const data = await normalizeWriteChunk(chunk)
     this.chunks.push(data)
+    this.bufferedBytes += data.byteLength
+    if (this.bufferedBytes > this.highWaterMark) {
+      if (!this.readyResolve) {
+        this.readyPromise = new Promise<void>((resolve) => {
+          this.readyResolve = resolve
+        })
+      }
+      return false
+    }
+    return true
   }
 
   flush() {
     if (this.closed) return
     if (this.chunks.length === 0) return
-    const payload = concatChunks(this.chunks)
+    let payload = concatChunks(this.chunks)
+    if (this.append) {
+      const existing = this.vfs.exists(this.path)
+        ? this.vfs.readFileBytes(this.path)
+        : new Uint8Array(0)
+      payload = concatChunks([existing, payload])
+    }
     this.vfs.writeFile(this.path, payload)
     this.chunks = []
+    this.bufferedBytes = 0
+    if (this.readyResolve) {
+      this.readyResolve()
+      this.readyResolve = null
+      this.readyPromise = Promise.resolve()
+    }
   }
 
   end() {

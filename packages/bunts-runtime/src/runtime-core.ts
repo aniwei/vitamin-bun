@@ -6,6 +6,7 @@ import { ModuleLoader } from './module-loader'
 import type { VirtualFileSystem } from '@vitamin-ai/virtual-fs'
 import type { ModuleRecord } from './module-loader'
 import type { RuntimePlugin } from './runtime-plugins'
+import type { BunSpawnOptions, BunSpawnResult, BunSpawnSyncResult } from './bun-runtime'
 
 export interface RuntimeCoreOptions {
   vfs: VirtualFileSystem
@@ -23,6 +24,7 @@ export class RuntimeCore {
   private evaluator: Evaluator
   private options: RuntimeCoreOptions
   private loader: ModuleLoader
+  private nextSpawnPid = 1
 
   constructor(options: RuntimeCoreOptions) {
     this.options = options
@@ -41,6 +43,8 @@ export class RuntimeCore {
         onServeRegister: options.onServeRegister,
         onServeUnregister: options.onServeUnregister,
         onModuleLoad: options.onModuleLoad,
+        onSpawn: (spawnOptions) => this.spawn(spawnOptions),
+        onSpawnSync: (spawnOptions) => this.spawnSync(spawnOptions),
       },
       plugins: options.plugins,
       pluginTrace: options.pluginTrace,
@@ -87,6 +91,115 @@ export class RuntimeCore {
     }
   }
 
+  private spawn(options: BunSpawnOptions): BunSpawnResult {
+    const pid = this.nextSpawnPid++
+    const exited = new Promise<number>((resolve) => {
+      void this.execWithCapture(options).then((result) => {
+        resolve(result.exitCode)
+        spawnResult.stdout = result.stdout
+        spawnResult.stderr = result.stderr
+      })
+    })
+
+    const spawnResult: BunSpawnResult = {
+      pid,
+      stdout: new Uint8Array(),
+      stderr: new Uint8Array(),
+      exited,
+    }
+
+    return spawnResult
+  }
+
+  private spawnSync(options: BunSpawnOptions): BunSpawnSyncResult {
+    const result = this.execWithCaptureSync(options)
+    return {
+      exitCode: result.exitCode,
+      stdout: result.stdout,
+      stderr: result.stderr,
+    }
+  }
+
+  private async execWithCapture(
+    options: BunSpawnOptions,
+  ): Promise<{ exitCode: number; stdout: Uint8Array; stderr: Uint8Array }> {
+    const stdoutChunks: Uint8Array[] = []
+    const stderrChunks: Uint8Array[] = []
+    const runtime = this.evaluator.runtime
+    const originalStdout = runtime.process.stdout.write
+    const originalStderr = runtime.process.stderr.write
+    const originalEnv = runtime.process.env
+
+    runtime.process.env = { ...originalEnv, ...(options.env ?? {}) }
+    runtime.process.stdout.write = (data: string | Uint8Array) => {
+      const bytes = typeof data === 'string' ? new TextEncoder().encode(data) : data
+      stdoutChunks.push(bytes)
+      originalStdout(data)
+    }
+    runtime.process.stderr.write = (data: string | Uint8Array) => {
+      const bytes = typeof data === 'string' ? new TextEncoder().encode(data) : data
+      stderrChunks.push(bytes)
+      originalStderr(data)
+    }
+
+    try {
+      const exitCode = await this.exec(options.cmd[0] ?? 'bun', options.cmd.slice(1))
+      return {
+        exitCode,
+        stdout: concatBuffers(stdoutChunks),
+        stderr: concatBuffers(stderrChunks),
+      }
+    } finally {
+      runtime.process.stdout.write = originalStdout
+      runtime.process.stderr.write = originalStderr
+      runtime.process.env = originalEnv
+    }
+  }
+
+  private execWithCaptureSync(
+    options: BunSpawnOptions,
+  ): { exitCode: number; stdout: Uint8Array; stderr: Uint8Array } {
+    const runtime = this.evaluator.runtime
+    const stdoutChunks: Uint8Array[] = []
+    const stderrChunks: Uint8Array[] = []
+    const originalStdout = runtime.process.stdout.write
+    const originalStderr = runtime.process.stderr.write
+    const originalEnv = runtime.process.env
+
+    runtime.process.env = { ...originalEnv, ...(options.env ?? {}) }
+    runtime.process.stdout.write = (data: string | Uint8Array) => {
+      const bytes = typeof data === 'string' ? new TextEncoder().encode(data) : data
+      stdoutChunks.push(bytes)
+      originalStdout(data)
+    }
+    runtime.process.stderr.write = (data: string | Uint8Array) => {
+      const bytes = typeof data === 'string' ? new TextEncoder().encode(data) : data
+      stderrChunks.push(bytes)
+      originalStderr(data)
+    }
+
+    let exitCode = 0
+    try {
+      const entry = this.resolveEntry(options.cmd[0] ?? 'bun', options.cmd.slice(1))
+      runtime.process.argv = ['bun', 'run', entry]
+      this.loadSync(entry)
+    } catch (err) {
+      exitCode = 1
+      const message = err instanceof Error ? err.stack ?? err.message : String(err)
+      this.options.onStderr?.(new TextEncoder().encode(message + '\n'))
+    } finally {
+      runtime.process.stdout.write = originalStdout
+      runtime.process.stderr.write = originalStderr
+      runtime.process.env = originalEnv
+    }
+
+    return {
+      exitCode,
+      stdout: concatBuffers(stdoutChunks),
+      stderr: concatBuffers(stderrChunks),
+    }
+  }
+
   createRequire(fromPath: string): (id: string) => unknown {
     return (id: string) => {
       const record = this.loadSync(id, fromPath)
@@ -115,4 +228,15 @@ export class RuntimeCore {
     }
     return command
   }
+}
+
+function concatBuffers(buffers: Uint8Array[]): Uint8Array {
+  const total = buffers.reduce((sum, chunk) => sum + chunk.byteLength, 0)
+  const merged = new Uint8Array(total)
+  let offset = 0
+  for (const chunk of buffers) {
+    merged.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+  return merged
 }

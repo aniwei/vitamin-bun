@@ -19,6 +19,10 @@ Vitamin Bun 使用示例合集，从入门到进阶。
 | 11 | [Bun.serve TLS Proxy](./11-bun-serve-tls/) | 通过 SW 代理 https 请求 | `Bun.serve`, `serviceWorkerUrl` |
 | 12 | [Bun Install (Proxy)](./12-bun-install/) | 通过 Vite 代理访问 npm 注册表 | `bun install`, `BUN_INSTALL_REGISTRY` |
 | 13 | [Plugin net/http/https](./13-plugin-net-http/) | 使用插件拦截模块加载与网络 API | `Bun.plugin`, `onModuleLoad` |
+| 14 | [Hono Server](./14-hono-server/) | 使用 Bun.serve 运行 Hono 应用 | `Bun.serve`, `bun install` |
+| 15 | [HTTP + net/tls](./15-http-net-tls/) | HTTP 客户端与 net/tls 代理演示 | `http`, `net`, `tls` |
+| 16 | [File IO](./16-file-io/) | Bun.file/Bun.write/FileSink 演示 | `Bun.file`, `Bun.write` |
+| 17 | [Plugin Lifecycle](./17-plugin-lifecycle/) | 插件生命周期与模块拦截 | `Bun.plugin`, `onRuntimeInit` |
 
 ## 快速开始
 

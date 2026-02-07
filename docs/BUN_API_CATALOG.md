@@ -12,8 +12,8 @@ Status legend: implemented | partial | missing
 | Bun.env | implemented | Environment variables from runtime. |
 | Bun.plugin | implemented | Runtime plugin registration. |
 | Bun.plugins | implemented | Registered plugin list. |
-| Bun.spawn | missing | Use SDK spawn; runtime global not yet. |
-| Bun.spawnSync | missing | Not available in browser runtime. |
+| Bun.spawn | partial | RuntimeCore-backed; no real OS processes, stdout/stderr buffered. |
+| Bun.spawnSync | partial | Runs via synchronous module load; best-effort only. |
 | Bun.build | missing | Planned. |
 | Bun.hash | missing | Planned. |
 | Bun.sleep | missing | Planned. |
@@ -42,7 +42,7 @@ Status legend: implemented | partial | missing
 | fetch protocol support | partial | `file:`/`data:`/`blob:` supported by browser; `s3:` not supported. |
 | fetch streaming request body | partial | Browser `ReadableStream` supported; behavior differs from Bun. |
 | fetch streaming response body | partial | Browser `ReadableStream` supported; behavior differs from Bun. |
-| fetch.preconnect | missing | Bun-specific optimization not implemented. |
+| fetch.preconnect | missing | Bun-specific optimization not implemented (warns on use). |
 
 ### Bun.serve server features
 
@@ -66,23 +66,42 @@ Status legend: implemented | partial | missing
 | BunFile.stream | partial | Streamed from VFS; backpressure semantics limited. |
 | BunFile.exists | partial | VFS-backed. |
 | BunFile.delete | partial | VFS-backed; missing file behavior follows VFS. |
-| Bun.write(destination, data) | partial | VFS-backed; Response/Blob supported (streamed). |
-| FileSink writer | partial | In-memory sink that flushes to VFS. |
+| Bun.write(destination, data) | partial | VFS-backed; Response/Blob/ReadableStream supported (streamed). |
+| FileSink writer | partial | In-memory sink with append/highWaterMark support. |
 
 ### Network + IO test coverage
 
 See [docs/NETWORK_IO_TESTS.md](docs/NETWORK_IO_TESTS.md) for the coverage map and gaps.
 
+## Verification Criteria
+
+### Phase 1 (Network + IO)
+- All Network + IO tests pass (`bunts-runtime`, `browser-runtime`, `network-proxy`).
+- Coverage map updated in [docs/NETWORK_IO_TESTS.md](docs/NETWORK_IO_TESTS.md).
+- Catalog entries updated for implemented/partial/missing status.
+
+### Phase 2+ (CLI + built-ins)
+- CLI/built-in module list defined with status and notes.
+- Compatibility notes and tests documented for new modules.
+
+## Status Checklist
+
+- Implemented entries reviewed and accurate.
+- Partial entries list concrete limitations.
+- Missing entries have a short note or plan.
+
 ## CLI Commands
 
 | Command | Status | Notes |
 | --- | --- | --- |
-| bun run | partial | Script execution via RuntimeCore. |
-| bun install | partial | registry/tarball support; lockfile basic. |
-| bun build | missing | Planned. |
-| bun test | missing | Planned. |
+| bun run | partial | Script execution via RuntimeCore; limited flags. |
+| bun install | partial | Registry/tarball support; lockfile basic. |
+| bun build | missing | Planned; no bundler in browser runtime. |
+| bun test | missing | Planned; no test runner yet. |
 | bun update | missing | Planned. |
 | bun create | missing | Planned. |
+| bun pm | missing | Planned; no package manager subcommands. |
+| bunx | missing | Planned; not wired in RuntimeCore. |
 
 ## Built-in Modules (bun:*)
 
@@ -92,6 +111,18 @@ See [docs/NETWORK_IO_TESTS.md](docs/NETWORK_IO_TESTS.md) for the coverage map an
 | bun:ffi | missing | Not supported in browser. |
 | bun:jsc | missing | Not applicable. |
 | bun:transpiler | missing | Planned. |
+| bun:glob | missing | Planned; VFS-backed implementation. |
+| bun:semver | missing | Planned; likely JS implementation. |
+
+## Phase 2+ Compatibility Notes
+
+- CLI commands are only available through RuntimeCore `exec`; only `bun run` and `bun install` are wired today.
+- bun:* modules are placeholders; none are bundled in the browser runtime yet.
+
+## Phase 2+ Test Coverage
+
+- CLI command tests: missing.
+- bun:* module tests: missing.
 
 ## Node Compatibility (core modules)
 

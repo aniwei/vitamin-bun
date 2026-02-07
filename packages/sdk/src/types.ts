@@ -6,6 +6,9 @@ import type { Readable } from './container'
 
 /** Options passed to `createBunContainer()`. */
 export interface ContainerOptions {
+  /** Root name used in sourceMappingURL for initial files. */
+  rootDir?: string
+
   /** URL to the Bun WASM binary (`.wasm` file). Optional for BunTS runtime. */
   wasmUrl?: string
   /**

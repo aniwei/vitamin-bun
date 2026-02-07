@@ -8,6 +8,7 @@
     "dev:04": "vite --open /04-code-editor/"
   },
   "dependencies": {
+    "hono": "^4.6.0",
     "@vitamin-ai/sdk": "workspace:*",
     "@vitamin-ai/wasm-host": "workspace:*",
     "@vitamin-ai/virtual-fs": "workspace:*",

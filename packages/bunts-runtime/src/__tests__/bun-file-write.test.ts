@@ -35,6 +35,31 @@ describe('Bun.file and Bun.write', () => {
     expect(out).toEqual(bytes)
   })
 
+  it('streams file contents', async () => {
+    const vfs = new VirtualFileSystem()
+    const runtime = createBunRuntime(vfs, {}, () => {}, () => {})
+
+    await runtime.Bun.write('/stream.bin', new Uint8Array([1, 2, 3, 4]))
+    const stream = runtime.Bun.file('/stream.bin').stream()
+    const reader = stream.getReader()
+    const chunks: Uint8Array[] = []
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      if (value) chunks.push(value)
+    }
+
+    const result = new Uint8Array(chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0))
+    let offset = 0
+    for (const chunk of chunks) {
+      result.set(chunk, offset)
+      offset += chunk.byteLength
+    }
+
+    expect(Array.from(result)).toEqual([1, 2, 3, 4])
+  })
+
   it('reads JSON content', async () => {
     const vfs = new VirtualFileSystem()
     const runtime = createBunRuntime(vfs, {}, () => {}, () => {})
@@ -108,6 +133,23 @@ describe('Bun.file and Bun.write', () => {
     expect(text).toBe('chunk-1-chunk-2')
   })
 
+  it('writes from ReadableStream input', async () => {
+    const vfs = new VirtualFileSystem()
+    const runtime = createBunRuntime(vfs, {}, () => {}, () => {})
+
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('alpha'))
+        controller.enqueue(new TextEncoder().encode('-beta'))
+        controller.close()
+      },
+    })
+
+    await runtime.Bun.write('/readable.txt', stream)
+    const text = await runtime.Bun.file('/readable.txt').text()
+    expect(text).toBe('alpha-beta')
+  })
+
   it('writes through FileSink', async () => {
     const vfs = new VirtualFileSystem()
     const runtime = createBunRuntime(vfs, {}, () => {}, () => {})
@@ -120,5 +162,35 @@ describe('Bun.file and Bun.write', () => {
 
     const text = await runtime.Bun.file('/sink.txt').text()
     expect(text).toBe('hello !')
+  })
+
+  it('appends with FileSink when enabled', async () => {
+    const vfs = new VirtualFileSystem()
+    const runtime = createBunRuntime(vfs, {}, () => {}, () => {})
+
+    await runtime.Bun.write('/append.txt', 'start')
+    const sink = runtime.Bun.file('/append.txt').writer({ append: true })
+    await sink.write('-end')
+    sink.close()
+
+    const text = await runtime.Bun.file('/append.txt').text()
+    expect(text).toBe('start-end')
+  })
+
+  it('signals backpressure when exceeding highWaterMark', async () => {
+    const vfs = new VirtualFileSystem()
+    const runtime = createBunRuntime(vfs, {}, () => {}, () => {})
+
+    const sink = runtime.Bun.file('/backpressure.txt').writer({ highWaterMark: 4 })
+    const ok = await sink.write('hello')
+    expect(ok).toBe(false)
+
+    const ready = sink.ready
+    sink.flush()
+    await ready
+
+    sink.close()
+    const text = await runtime.Bun.file('/backpressure.txt').text()
+    expect(text).toBe('hello')
   })
 })

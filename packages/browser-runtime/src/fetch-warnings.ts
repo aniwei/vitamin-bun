@@ -1,5 +1,9 @@
 type FetchLike = typeof fetch
 
+type FetchWithPreconnect = FetchLike & {
+  preconnect?: (url: string | URL) => void
+}
+
 type WarnFn = (message: string) => void
 
 type FetchOptions = RequestInit & {
@@ -26,7 +30,7 @@ function warnUnsupportedOptions(init: unknown, warnOnce: (key: string, message: 
   }
 }
 
-export function wrapFetchWithWarnings(fetchImpl: FetchLike, warn: WarnFn = defaultWarn): FetchLike {
+export function wrapFetchWithWarnings(fetchImpl: FetchLike, warn: WarnFn = defaultWarn): FetchWithPreconnect {
   const warnedKeys = new Set<string>()
 
   const warnOnce = (key: string, message: string) => {
@@ -35,15 +39,22 @@ export function wrapFetchWithWarnings(fetchImpl: FetchLike, warn: WarnFn = defau
     warn(message)
   }
 
-  return ((input: RequestInfo | URL, init?: RequestInit) => {
+  const wrapped = ((input: RequestInfo | URL, init?: RequestInit) => {
     warnUnsupportedOptions(init, warnOnce)
     return fetchImpl(input, init)
-  }) as FetchLike
+  }) as FetchWithPreconnect
+
+  wrapped.preconnect = (url: string | URL) => {
+    warnOnce('fetch.preconnect', 'fetch.preconnect is not supported in browser runtime')
+    void url
+  }
+
+  return wrapped
 }
 
 export function installFetchWarnings(): void {
   const globalScope = globalThis as {
-    fetch?: FetchLike
+    fetch?: FetchWithPreconnect
     __vitaminFetchWarningsInstalled?: boolean
   }
 
