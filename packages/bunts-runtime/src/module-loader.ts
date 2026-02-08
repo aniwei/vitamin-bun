@@ -113,16 +113,21 @@ export class ModuleLoader {
       console: Console,
     ) => void
 
-    fn(
-      require,
-      module as { exports: Record<string, unknown> },
-      module.exports,
-      resolved,
-      dirname(resolved),
-      this.runtime.Bun,
-      this.runtime.process,
-      this.runtime.console,
-    )
+    try {
+      fn(
+        require,
+        module as { exports: Record<string, unknown> },
+        module.exports,
+        resolved,
+        dirname(resolved),
+        this.runtime.Bun,
+        this.runtime.process,
+        this.runtime.console,
+      )
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      throw new Error(`Module execution failed: ${resolved}\n${message}`)
+    }
 
     this.applyInterop(module, resolved, source)
 
@@ -216,16 +221,21 @@ export class ModuleLoader {
       console: Console,
     ) => void
 
-    fn(
-      require,
-      module as { exports: Record<string, unknown> },
-      module.exports,
-      resolved,
-      dirname(resolved),
-      this.runtime.Bun,
-      this.runtime.process,
-      this.runtime.console,
-    )
+    try {
+      fn(
+        require,
+        module as { exports: Record<string, unknown> },
+        module.exports,
+        resolved,
+        dirname(resolved),
+        this.runtime.Bun,
+        this.runtime.process,
+        this.runtime.console,
+      )
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      throw new Error(`Module execution failed: ${resolved}\n${message}`)
+    }
 
     this.applyInterop(module, resolved, source)
 
