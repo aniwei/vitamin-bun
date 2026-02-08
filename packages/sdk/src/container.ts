@@ -327,10 +327,22 @@ function withSourceMapUrls(
 }
 
 function appendSourceMapUrl(content: string, rootDir: string, fileName: string): string {
+  if (!shouldAppendSourceMap(fileName)) return content
   if (content.includes('sourceMappingURL=')) return content
   const suffix = `//# sourceMappingURL=@vitamin-ai/${rootDir}/${fileName}`
   if (content.endsWith('\n')) return content + suffix + '\n'
   return content + '\n' + suffix + '\n'
+}
+
+function shouldAppendSourceMap(fileName: string): boolean {
+  const lower = fileName.toLowerCase()
+  if (lower.endsWith('.json')) return false
+  return lower.endsWith('.ts')
+    || lower.endsWith('.tsx')
+    || lower.endsWith('.js')
+    || lower.endsWith('.jsx')
+    || lower.endsWith('.mjs')
+    || lower.endsWith('.cjs')
 }
 
 function normalizeRootDir(rootDir: string): string {

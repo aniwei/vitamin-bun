@@ -62,4 +62,21 @@ describe('ModuleLoader', () => {
     const mod = await loader.load('/index.ts')
     expect((mod.exports as { value?: number }).value).toBe(42)
   })
+
+  it('resolves bare node_modules packages', async () => {
+    const vfs = new VirtualFileSystem()
+    vfs.mkdirp('/node_modules/hono')
+    vfs.writeFile('/node_modules/hono/package.json', JSON.stringify({ main: './index.js' }))
+    vfs.writeFile('/node_modules/hono/index.js', 'module.exports = { ok: true }')
+    vfs.writeFile('/index.ts', `const hono = require('hono'); export const ok = hono.ok;`)
+
+    const loader = new ModuleLoader({
+      vfs,
+      transpiler: new Transpiler(),
+      runtime: createRuntime(),
+    })
+
+    const mod = await loader.load('/index.ts')
+    expect((mod.exports as { ok?: boolean }).ok).toBe(true)
+  })
 })

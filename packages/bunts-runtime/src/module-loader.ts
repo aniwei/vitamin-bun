@@ -125,9 +125,10 @@ export class ModuleLoader {
   }
 
   loadSync(entry: string, parent?: string): ModuleRecord {
-    const resolveResult = this.hooks?.onModuleResolve?.(entry, parent)
-    if (resolveResult && typeof (resolveResult as Promise<unknown>).then === 'function') {
-      throw new Error('onModuleResolve returned a Promise in loadSync')
+    let resolveResult = this.hooks?.onModuleResolve?.(entry, parent)
+    if (isPromise(resolveResult)) {
+      console.warn('onModuleResolve returned a Promise in loadSync; ignoring async result')
+      resolveResult = undefined
     }
     if (resolveResult?.id) {
       entry = resolveResult.id
@@ -135,9 +136,10 @@ export class ModuleLoader {
         return { id: resolveResult.id, exports: {} }
       }
     }
-    const hookResult = this.hooks?.onModuleLoad?.(entry, parent)
-    if (hookResult && typeof (hookResult as Promise<unknown>).then === 'function') {
-      throw new Error('onModuleLoad returned a Promise in loadSync')
+    let hookResult = this.hooks?.onModuleLoad?.(entry, parent)
+    if (isPromise(hookResult)) {
+      console.warn('onModuleLoad returned a Promise in loadSync; ignoring async result')
+      hookResult = undefined
     }
     if (hookResult?.exports) {
       const id = hookResult.id ?? entry
@@ -216,12 +218,42 @@ export class ModuleLoader {
 
   resolve(entry: string, parent?: string): string {
     const baseDir = parent ? dirname(parent) : '/'
+    const normalizedCore = this.normalizeCoreModuleId(entry)
+    if (!this.isCoreModule(normalizedCore) && isBareSpecifier(entry)) {
+      const nodeResolved = this.resolveNodeModule(entry, baseDir)
+      if (nodeResolved) return nodeResolved
+    }
     const candidate = parent ? join(baseDir, entry) : normalizePath(entry)
 
     const resolved = this.resolveWithExtensions(candidate)
     if (resolved) return resolved
 
     throw new Error(`MODULE_NOT_FOUND: ${entry}`)
+  }
+
+  private resolveNodeModule(entry: string, baseDir: string): string | null {
+    const { packageName, subpath } = splitPackagePath(entry)
+    let current = baseDir
+
+    while (true) {
+      const nodeModulesDir = current.endsWith('/') ? `${current}node_modules` : `${current}/node_modules`
+      const packageDir = `${nodeModulesDir}/${packageName}`
+      if (this.vfs.exists(packageDir)) {
+        if (subpath) {
+          const target = join(packageDir, subpath)
+          const resolved = this.resolveWithExtensions(target)
+          if (resolved) return resolved
+        } else {
+          const resolved = this.resolvePackageEntry(packageDir)
+          if (resolved) return resolved
+        }
+      }
+
+      if (current === '/' || current === '') break
+      current = dirname(current)
+    }
+
+    return null
   }
 
   private resolveWithExtensions(path: string): string | null {
@@ -471,4 +503,27 @@ export class ModuleLoader {
     if (raw.startsWith('net')) return 'net'
     return raw
   }
+}
+
+function isPromise(value: unknown): value is Promise<unknown> {
+  return Boolean(value) && typeof (value as Promise<unknown>).then === 'function'
+}
+
+function isBareSpecifier(id: string): boolean {
+  if (!id) return false
+  if (id.startsWith('.') || id.startsWith('/') || id.startsWith('node:')) return false
+  return true
+}
+
+function splitPackagePath(entry: string): { packageName: string; subpath: string | null } {
+  if (entry.startsWith('@')) {
+    const parts = entry.split('/').filter(Boolean)
+    const packageName = parts.slice(0, 2).join('/')
+    const subpath = parts.slice(2).join('/')
+    return { packageName, subpath: subpath || null }
+  }
+  const parts = entry.split('/').filter(Boolean)
+  const packageName = parts[0] ?? entry
+  const subpath = parts.slice(1).join('/')
+  return { packageName, subpath: subpath || null }
 }
