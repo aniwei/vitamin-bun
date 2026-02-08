@@ -7,6 +7,31 @@ export type BunInstallOptions = {
   registryUrl?: string
   stdout?: (message: string) => void
   stderr?: (message: string) => void
+  onProgress?: (info: {
+    phase: 'start' | 'metadata' | 'download' | 'extract' | 'done' | 'skip' | 'error'
+    name: string
+    spec: string
+    version?: string
+    message?: string
+  }) => void
+  onPackageCount?: (info: { total: number; installed: number }) => void
+  onDownloadProgress?: (info: {
+    name: string
+    spec: string
+    version?: string
+    received: number
+    total?: number
+    percent?: number
+  }) => void
+  onDownloadError?: (info: {
+    name: string
+    spec: string
+    version?: string
+    url?: string
+    message: string
+    optional: boolean
+    shouldContinue: boolean
+  }) => void
   fetchImpl?: typeof fetch
   enableScripts?: boolean
   runScript?: (command: string, cwd: string) => Promise<void>
@@ -69,11 +94,19 @@ export async function bunInstall(options: BunInstallOptions): Promise<void> {
   const installQueue: InstallRequest[] = []
   const installed = new Map<string, LockfileEntry>()
   const lockfile: Lockfile = { dependencies: {} }
+  const seenRequests = new Set<string>()
+
+  const pushRequest = (request: InstallRequest) => {
+    if (seenRequests.has(request.name)) return
+    seenRequests.add(request.name)
+    installQueue.push(request)
+    options.onPackageCount?.({ total: seenRequests.size, installed: installed.size })
+  }
 
   vfs.mkdirp(joinPath(cwd, 'node_modules'))
 
   for (const [name, spec] of Object.entries(deps)) {
-    installQueue.push({ name, spec, optional: false })
+    pushRequest({ name, spec, optional: false })
   }
 
   while (installQueue.length > 0) {
@@ -90,12 +123,17 @@ export async function bunInstall(options: BunInstallOptions): Promise<void> {
         workspacePackages,
         installed,
         installQueue,
+        pushRequest,
         stdout,
         stderr,
+        onProgress: options.onProgress,
+        onPackageCount: options.onPackageCount,
+        onDownloadProgress: options.onDownloadProgress,
         enableScripts,
         runScript: options.runScript,
       })
       installed.set(request.name, entry)
+      options.onPackageCount?.({ total: seenRequests.size, installed: installed.size })
       lockfile.dependencies[request.name] = entry
     } catch (err) {
       if (request.optional) {
@@ -128,12 +166,44 @@ async function fetchJson<T>(fetchImpl: typeof fetch, url: string): Promise<T> {
   return (await response.json()) as T
 }
 
-async function fetchArrayBuffer(fetchImpl: typeof fetch, url: string): Promise<ArrayBuffer> {
+async function fetchArrayBuffer(
+  fetchImpl: typeof fetch,
+  url: string,
+  onProgress?: (received: number, total?: number) => void,
+): Promise<ArrayBuffer> {
   const response = await fetchImpl(url)
   if (!response.ok) {
     throw new Error(`Failed to fetch ${url}: ${response.status}`)
   }
-  return await response.arrayBuffer()
+
+  if (!response.body || !onProgress) {
+    return await response.arrayBuffer()
+  }
+
+  const total = response.headers.get('content-length')
+  const totalBytes = total ? Number(total) : undefined
+  const reader = response.body.getReader()
+  const chunks: Uint8Array[] = []
+  let received = 0
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    if (value) {
+      chunks.push(value)
+      received += value.byteLength
+      onProgress(received, totalBytes)
+    }
+  }
+
+  const buffer = new Uint8Array(received)
+  let offset = 0
+  for (const chunk of chunks) {
+    buffer.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+
+  return buffer.buffer
 }
 
 function resolveVersion(spec: string, metadata: RegistryMetadata): string {
@@ -146,7 +216,12 @@ function resolveVersion(spec: string, metadata: RegistryMetadata): string {
   const normalized = spec.replace(/^workspace:/, '')
   if (metadata.versions[normalized]) return normalized
 
-  const candidates = Object.keys(metadata.versions).filter((version) => satisfiesRange(version, normalized))
+  const ranges = normalized.split('||').map((part) => part.trim()).filter(Boolean)
+  const candidates = Object.keys(metadata.versions).filter((version) =>
+    ranges.length > 0
+      ? ranges.some((range) => satisfiesRange(version, range))
+      : satisfiesRange(version, normalized),
+  )
   const selected = maxVersion(candidates)
 
   if (!selected) throw new Error(`No matching version for ${spec}`)
@@ -193,6 +268,9 @@ function compareVersion(a: string, b: string): number {
 
 function satisfiesRange(version: string, range: string): boolean {
   if (!range || range === '*' || range === 'latest') return true
+  if (range.includes('||')) {
+    return range.split('||').some((part) => satisfiesRange(version, part.trim()))
+  }
   if (range.startsWith('^') || range.startsWith('~')) {
     const base = normalizeShortVersion(range.slice(1))
     const baseVersion = parseVersion(base)
@@ -454,8 +532,34 @@ async function installDependency(params: {
   workspacePackages: Map<string, WorkspacePackage>
   installed: Map<string, LockfileEntry>
   installQueue: InstallRequest[]
+  pushRequest: (request: InstallRequest) => void
   stdout?: (message: string) => void
   stderr?: (message: string) => void
+  onProgress?: (info: {
+    phase: 'start' | 'metadata' | 'download' | 'extract' | 'done' | 'skip' | 'error'
+    name: string
+    spec: string
+    version?: string
+    message?: string
+  }) => void
+  onPackageCount?: (info: { total: number; installed: number }) => void
+  onDownloadProgress?: (info: {
+    name: string
+    spec: string
+    version?: string
+    received: number
+    total?: number
+    percent?: number
+  }) => void
+  onDownloadError?: (info: {
+    name: string
+    spec: string
+    version?: string
+    url?: string
+    message: string
+    optional: boolean
+    shouldContinue: boolean
+  }) => void
   enableScripts: boolean
   runScript?: (command: string, cwd: string) => Promise<void>
 }): Promise<LockfileEntry> {
@@ -476,6 +580,7 @@ async function installDependency(params: {
   } = params
 
   stdout?.(`Installing ${request.name}@${request.spec}...\n`)
+  params.onProgress?.({ phase: 'start', name: request.name, spec: request.spec })
 
   const workspace = resolveWorkspaceDependency(request, workspacePackages)
   if (!workspace && isWorkspaceSpec(request.spec)) {
@@ -486,7 +591,7 @@ async function installDependency(params: {
     vfs.mkdirp(installPath)
     copyDirectory(vfs, workspace.path, installPath)
     const workspacePkg = readPackageJson(vfs, joinPath(installPath, 'package.json'))
-    enqueueDependencies(installQueue, workspacePkg, request.name)
+    enqueueDependencies(workspacePkg, request.name, params.pushRequest)
     checkPeerDependencies(workspacePkg, installed, stderr)
     await runLifecycleScripts({
       pkg: workspacePkg,
@@ -495,6 +600,12 @@ async function installDependency(params: {
       runScript,
       stderr,
     })
+    params.onProgress?.({
+      phase: 'done',
+      name: request.name,
+      spec: request.spec,
+      version: workspacePkg.version ?? workspace.version ?? '0.0.0',
+    })
     return {
       version: workspacePkg.version ?? workspace.version ?? '0.0.0',
       resolved: `workspace:${workspace.path}`,
@@ -502,24 +613,56 @@ async function installDependency(params: {
     }
   }
 
+  params.onProgress?.({ phase: 'metadata', name: request.name, spec: request.spec })
   const metadata = await fetchRegistryMetadata(fetchImpl, registryUrl, request.name, registryCache)
   const version = resolveVersion(request.spec, metadata)
+  params.onProgress?.({ phase: 'metadata', name: request.name, spec: request.spec, version })
   const dist = metadata.versions[version]?.dist
   if (!dist?.tarball) {
     throw new Error(`No tarball found for ${request.name}@${version}`)
   }
 
+  params.onProgress?.({ phase: 'download', name: request.name, spec: request.spec, version })
   const tarballUrl = rewriteTarballUrl(dist.tarball, registryUrl)
-  const tarball = await fetchArrayBuffer(fetchImpl, tarballUrl)
-  const tarData = isGzip(tarball) ? await gunzip(new Uint8Array(tarball)) : new Uint8Array(tarball)
-  if (dist.integrity) {
-    await verifyIntegrity(tarData, dist.integrity)
+  let tarball: ArrayBuffer
+  try {
+    tarball = await fetchArrayBuffer(fetchImpl, tarballUrl, (received, total) => {
+      const percent = total ? Math.round((received / total) * 100) : undefined
+      params.onDownloadProgress?.({ name: request.name, spec: request.spec, version, received, total, percent })
+    })
+    const tarballBytes = new Uint8Array(tarball)
+    if (dist.integrity) {
+      await verifyIntegrity(tarballBytes, dist.integrity)
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    params.onDownloadError?.({
+      name: request.name,
+      spec: request.spec,
+      version,
+      url: tarballUrl,
+      message,
+      optional: request.optional,
+      shouldContinue: request.optional,
+    })
+    params.onProgress?.({ phase: 'error', name: request.name, spec: request.spec, version, message })
+    throw err
   }
+
+  const tarballBytes = new Uint8Array(tarball)
+  params.onProgress?.({ phase: 'extract', name: request.name, spec: request.spec, version })
+  const tarData = isGzip(tarball) ? await gunzip(tarballBytes) : tarballBytes
 
   const installPath = resolveNodeModulesPath(cwd, request.name)
   extractTarToVfs(vfs, tarData, installPath)
-  const installedPkg = readPackageJson(vfs, joinPath(installPath, 'package.json'))
-  enqueueDependencies(installQueue, installedPkg, request.name)
+  const installedPkg = readPackageJsonSafe(
+    vfs,
+    joinPath(installPath, 'package.json'),
+    request.name,
+    version,
+    stderr,
+  )
+  enqueueDependencies(installedPkg, request.name, params.pushRequest)
   checkPeerDependencies(installedPkg, installed, stderr)
   await runLifecycleScripts({
     pkg: installedPkg,
@@ -529,6 +672,7 @@ async function installDependency(params: {
     stderr,
   })
 
+  params.onProgress?.({ phase: 'done', name: request.name, spec: request.spec, version })
   return {
     version: installedPkg.version ?? version,
     integrity: dist.integrity,
@@ -537,16 +681,31 @@ async function installDependency(params: {
   }
 }
 
+function readPackageJsonSafe(
+  vfs: VirtualFileSystem,
+  path: string,
+  name: string,
+  version: string,
+  stderr?: (message: string) => void,
+): PackageJson {
+  try {
+    return readPackageJson(vfs, path)
+  } catch (err) {
+    stderr?.(`Warning: ${String(err)}; falling back to minimal package.json for ${name}\n`)
+    return { name, version, dependencies: {} }
+  }
+}
+
 function enqueueDependencies(
-  queue: InstallRequest[],
   pkg: PackageJson,
-  parent?: string,
+  parent: string | undefined,
+  pushRequest: (request: InstallRequest) => void,
 ): void {
   for (const [name, spec] of Object.entries(pkg.dependencies ?? {})) {
-    queue.push({ name, spec, optional: false, parent })
+    pushRequest({ name, spec, optional: false, parent })
   }
   for (const [name, spec] of Object.entries(pkg.optionalDependencies ?? {})) {
-    queue.push({ name, spec, optional: true, parent })
+    pushRequest({ name, spec, optional: true, parent })
   }
 }
 
@@ -640,15 +799,23 @@ async function runLifecycleScripts(params: {
 }
 
 async function verifyIntegrity(data: Uint8Array, integrity: string): Promise<void> {
-  const [algorithm, expected] = integrity.split('-', 2)
-  if (!expected) throw new Error(`Unsupported integrity format: ${integrity}`)
+  const candidates = integrity.trim().split(/\s+/)
+  if (candidates.length === 0) throw new Error(`Unsupported integrity format: ${integrity}`)
   const subtle = await getSubtleCrypto()
   const buffer = data.slice().buffer
-  const digest = await subtle.digest(normalizeAlgorithm(algorithm), buffer)
-  const actual = toBase64(new Uint8Array(digest))
-  if (actual !== expected) {
-    throw new Error(`Integrity check failed for ${algorithm}`)
+  const results: Array<{ algorithm: string; expected: string; actual: string }> = []
+
+  for (const candidate of candidates) {
+    const [algorithm, expected] = candidate.split('-', 2)
+    if (!expected) continue
+    const digest = await subtle.digest(normalizeAlgorithm(algorithm), buffer)
+    const actual = toBase64(new Uint8Array(digest))
+    results.push({ algorithm, expected, actual })
+    if (actual === expected) return
   }
+
+  const summary = results.map((item) => `${item.algorithm}: ${item.actual}`).join(', ')
+  throw new Error(`Integrity check failed for ${summary}`)
 }
 
 async function getSubtleCrypto(): Promise<SubtleCrypto> {

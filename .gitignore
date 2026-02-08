@@ -22,6 +22,8 @@ target
 .scripts
 .direnv/
 packages/bun-wasm/wasm/
+tests/upstream/bun/
+tests/upstream/node/
 
 # Local dev files
 opencode-dev

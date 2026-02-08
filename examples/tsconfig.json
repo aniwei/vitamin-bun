@@ -4,6 +4,7 @@
     "outDir": "dist",
     "rootDir": ".",
     "noEmit": true,
+    "jsx": "react-jsx",
     "paths": {
       "@vitamin-ai/sdk": ["../packages/sdk/src/index.ts"],
       "@vitamin-ai/wasm-host": ["../packages/wasm-host/src/index.ts"],
@@ -13,7 +14,8 @@
     }
   },
   "include": [
-    "**/*.ts"
+    "**/*.ts",
+    "**/*.tsx"
   ],
   "references": [
     { "path": "../packages/sdk" },

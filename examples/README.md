@@ -23,6 +23,7 @@ Vitamin Bun 使用示例合集，从入门到进阶。
 | 15 | [HTTP + net/tls](./15-http-net-tls/) | HTTP 客户端与 net/tls 代理演示 | `http`, `net`, `tls` |
 | 16 | [File IO](./16-file-io/) | Bun.file/Bun.write/FileSink 演示 | `Bun.file`, `Bun.write` |
 | 17 | [Plugin Lifecycle](./17-plugin-lifecycle/) | 插件生命周期与模块拦截 | `Bun.plugin`, `onRuntimeInit` |
+| 18 | [Vite + React](./18-vite-react/) | 使用 React UI 驱动 Bun 容器执行脚本 | `createBunContainer`, `exec` |
 
 ## 快速开始
 

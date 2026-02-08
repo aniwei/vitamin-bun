@@ -75,58 +75,107 @@ export class RuntimeCore {
 
   async exec(command: string, args: string[]): Promise<number> {
     try {
-      if (command === 'bun') {
-        const subcommand = args[0] ?? 'run'
-        if (subcommand === 'install') {
-          this.evaluator.runtime.process.argv = ['bun', 'install', ...args.slice(1)]
-          const registryUrl =
-            this.options.env?.BUN_INSTALL_REGISTRY ??
-            this.options.env?.NPM_CONFIG_REGISTRY
-
-          await bunInstall({
-            vfs: this.options.vfs,
-            cwd: this.evaluator.runtime.process.cwd(),
-            registryUrl,
-            stdout: (message) => this.evaluator.runtime.process.stdout.write(message),
-            stderr: (message) => this.evaluator.runtime.process.stderr.write(message),
-          })
-          
-          return 0
-        }
-
-        if (subcommand === 'build') {
-          return this.reportUnsupportedCli('bun build')
-        }
-
-        if (subcommand === 'test') {
-          return this.reportUnsupportedCli('bun test')
-        }
-
-        if (subcommand === 'update') {
-          return this.reportUnsupportedCli('bun update')
-        }
-
-        if (subcommand === 'create') {
-          return this.reportUnsupportedCli('bun create')
-        }
-
-        if (subcommand === 'pm') {
-          return this.reportUnsupportedCli('bun pm')
-        }
-
-        if (subcommand === 'x' || subcommand === 'bunx') {
-          return await this.execBunx(args.slice(1))
-        }
-      }
-      const entry = this.resolveEntry(command, args)
-      this.evaluator.runtime.process.argv = ['bun', 'run', entry]
-      await this.evaluator.run(entry)
-      return 0
+      const parsed = this.parseCommand(command, args)
+      command = parsed.command
+      args = parsed.args
+      return await this.runCommand(command, args)
     } catch (err) {
       const message = err instanceof Error ? err.stack ?? err.message : String(err)
       const encoder = new TextEncoder()
       this.options.onStderr?.(encoder.encode(message + '\n'))
       return 1
+    }
+  }
+
+  private async runCommand(command: string, args: string[]): Promise<number> {
+    switch (command) {
+      case 'bun':
+        return await this.runBunCommand(args)
+      case 'bunx':
+        return await this.execBunx(args)
+      default:
+        return await this.runEntryCommand(command, args)
+    }
+  }
+
+  private async runBunCommand(args: string[]): Promise<number> {
+    const subcommand = args[0] ?? 'run'
+    if (subcommand === 'install') {
+      this.evaluator.runtime.process.argv = ['bun', 'install', ...args.slice(1)]
+      const registryUrl =
+        this.options.env?.BUN_INSTALL_REGISTRY ??
+        this.options.env?.NPM_CONFIG_REGISTRY
+      const progressPrefix = '__BUN_INSTALL_PROGRESS__ '
+      const emitProgress = (payload: Record<string, unknown>) => {
+        this.evaluator.runtime.process.stdout.write(
+          `${progressPrefix}${JSON.stringify(payload)}\n`,
+        )
+      }
+
+      await bunInstall({
+        vfs: this.options.vfs,
+        cwd: this.evaluator.runtime.process.cwd(),
+        registryUrl,
+        stdout: (message) => this.evaluator.runtime.process.stdout.write(message),
+        stderr: (message) => this.evaluator.runtime.process.stderr.write(message),
+        onProgress: (info) => emitProgress({ type: 'progress', ...info }),
+        onPackageCount: (info) => emitProgress({ type: 'count', ...info }),
+        onDownloadProgress: (info) => emitProgress({ type: 'download', ...info }),
+      })
+
+      return 0
+    }
+
+    if (subcommand === 'build') {
+      return this.reportUnsupportedCli('bun build')
+    }
+
+    if (subcommand === 'test') {
+      return this.reportUnsupportedCli('bun test')
+    }
+
+    if (subcommand === 'update') {
+      return this.reportUnsupportedCli('bun update')
+    }
+
+    if (subcommand === 'create') {
+      return this.reportUnsupportedCli('bun create')
+    }
+
+    if (subcommand === 'pm') {
+      return this.reportUnsupportedCli('bun pm')
+    }
+
+    if (subcommand === 'x' || subcommand === 'bunx') {
+      return await this.execBunx(args.slice(1))
+    }
+
+    return await this.runEntryCommand('bun', args)
+  }
+
+  private async runEntryCommand(command: string, args: string[]): Promise<number> {
+    const entry = this.resolveEntry(command, args)
+    this.evaluator.runtime.process.argv = ['bun', 'run', entry]
+    await this.evaluator.run(entry)
+    return 0
+  }
+
+  private parseCommand(
+    command: string,
+    args: string[],
+  ): { command: string; args: string[] } {
+    const trimmed = command.trim()
+    if (!trimmed.includes(' ')) {
+      return { command: trimmed, args }
+    }
+
+    const tokens = tokenizeArgString(trimmed)
+    if (tokens.length === 0) {
+      return { command: trimmed, args }
+    }
+    return {
+      command: tokens[0],
+      args: [...tokens.slice(1), ...args],
     }
   }
 
@@ -294,4 +343,56 @@ function concatBuffers(buffers: Uint8Array[]): Uint8Array {
     offset += chunk.byteLength
   }
   return merged
+}
+
+function tokenizeArgString(input: string): string[] {
+  const tokens: string[] = []
+  let current = ''
+  let quote: '"' | "'" | null = null
+  let escape = false
+
+  for (let i = 0; i < input.length; i += 1) {
+    const char = input[i] ?? ''
+    if (escape) {
+      current += char
+      escape = false
+      continue
+    }
+
+    if (char === '\\') {
+      escape = true
+      continue
+    }
+
+    if (char === '"' || char === "'") {
+      if (quote === char) {
+        quote = null
+      } else if (!quote) {
+        quote = char
+      } else {
+        current += char
+      }
+      continue
+    }
+
+    if (!quote && /\s/.test(char)) {
+      if (current.length > 0) {
+        tokens.push(current)
+        current = ''
+      }
+      continue
+    }
+
+    current += char
+  }
+
+  if (escape) {
+    current += '\\'
+  }
+
+  if (current.length > 0) {
+    tokens.push(current)
+  }
+
+  return tokens
 }
