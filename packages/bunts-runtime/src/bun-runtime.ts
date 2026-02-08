@@ -1,5 +1,6 @@
 import type { VirtualFileSystem } from '@vitamin-ai/virtual-fs'
 import type { PluginManager, RuntimePlugin } from './runtime-plugins'
+import { SimpleEmitter } from './shared/simple-emitter'
 
 export interface RuntimeEnv {
   env?: Record<string, string>
@@ -75,13 +76,37 @@ export interface BunRuntime {
   process: {
     env: Record<string, string>
     argv: string[]
+    execArgv: string[]
+    execPath: string
     cwd: () => string
+    chdir: (path: string) => void
     platform: string
     arch: string
     version: string
     versions: Record<string, string>
+    pid: number
+    ppid: number
+    uptime: () => number
+    hrtime: {
+      (time?: [number, number]): [number, number]
+      bigint: () => bigint
+    }
     stdout: { write: (data: string | Uint8Array) => void }
     stderr: { write: (data: string | Uint8Array) => void }
+    stdin: {
+      isTTY: boolean
+      read: () => null
+      resume: () => void
+      pause: () => void
+      on: (event: string, listener: (...args: unknown[]) => void) => void
+    }
+    exitCode?: number
+    exit: (code?: number) => void
+    emitWarning: (warning: string | Error) => void
+    on: (event: string, listener: (...args: unknown[]) => void) => void
+    once: (event: string, listener: (...args: unknown[]) => void) => void
+    off: (event: string, listener: (...args: unknown[]) => void) => void
+    emit: (event: string, ...args: unknown[]) => boolean
     nextTick: (callback: (...args: unknown[]) => void, ...args: unknown[]) => void
   }
   console: Console
@@ -115,6 +140,10 @@ export function createBunRuntime(
   }
 
   const bunEnv = { ...(env.env ?? {}) }
+  let currentCwd = env.cwd ?? '/'
+  const processEmitter = new SimpleEmitter()
+  let processExitCode: number | undefined
+  const startTime = Date.now()
 
   const nextTickQueue: Array<() => void> = []
   let nextTickScheduled = false
@@ -244,15 +273,80 @@ export function createBunRuntime(
     process: {
       env: bunEnv,
       argv: env.argv ?? [],
-      cwd: () => env.cwd ?? '/',
+      execArgv: [],
+      execPath: 'bun',
+      cwd: () => currentCwd,
+      chdir: (path: string) => {
+        currentCwd = path
+      },
       platform: 'browser',
       arch: 'wasm',
       version: 'v0.0.0-bunts',
       versions: {
         bunts: '0.0.0',
+        node: '0.0.0',
       },
+      pid: 1,
+      ppid: 0,
+      uptime: () => (Date.now() - startTime) / 1000,
+      hrtime: Object.assign(
+        (time?: [number, number]): [number, number] => {
+          const origin = (globalThis.performance?.timeOrigin ?? startTime)
+          const now = globalThis.performance?.now ? globalThis.performance.now() : Date.now() - origin
+          const seconds = Math.floor(now / 1000)
+          const nanoseconds = Math.floor((now % 1000) * 1e6)
+          if (!time) return [seconds, nanoseconds]
+          let diffSeconds = seconds - time[0]
+          let diffNanos = nanoseconds - time[1]
+          if (diffNanos < 0) {
+            diffSeconds -= 1
+            diffNanos += 1e9
+          }
+          return [diffSeconds, diffNanos]
+        },
+        {
+          bigint: () => {
+            const origin = (globalThis.performance?.timeOrigin ?? startTime)
+            const now = globalThis.performance?.now ? globalThis.performance.now() : Date.now() - origin
+            return BigInt(Math.floor(now * 1e6))
+          },
+        },
+      ),
       stdout,
       stderr,
+      stdin: {
+        isTTY: false,
+        read: () => null,
+        resume: () => {},
+        pause: () => {},
+        on: () => {},
+      },
+      get exitCode() {
+        return processExitCode
+      },
+      set exitCode(value: number | undefined) {
+        processExitCode = value
+      },
+      exit: (code = 0) => {
+        const exitCode = Number(code)
+        const record = Number.isNaN(exitCode) ? 0 : exitCode
+        processExitCode = record
+        processEmitter.emit('exit', record)
+      },
+      emitWarning: (warning: string | Error) => {
+        const message = warning instanceof Error ? warning.message : warning
+        console.warn(message)
+      },
+      on: (event: string, listener: (...args: unknown[]) => void) => {
+        processEmitter.on(event, listener)
+      },
+      once: (event: string, listener: (...args: unknown[]) => void) => {
+        processEmitter.once(event, listener)
+      },
+      off: (event: string, listener: (...args: unknown[]) => void) => {
+        processEmitter.off(event, listener)
+      },
+      emit: (event: string, ...args: unknown[]) => processEmitter.emit(event, ...args),
       nextTick: (callback: (...args: unknown[]) => void, ...args: unknown[]) => {
         nextTickQueue.push(() => callback(...args))
         scheduleNextTick()
@@ -281,6 +375,11 @@ export function createBunRuntime(
       timeEnd: () => {},
       timeLog: () => {},
       timeStamp: () => {},
+      profile: () => {},
+      profileEnd: () => {},
+      Console:
+        (globalThis.console as unknown as { Console?: Console['Console'] })?.Console ??
+        (function Console() {} as unknown as Console['Console']),
     },
   }
 }

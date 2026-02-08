@@ -1,6 +1,3 @@
-import type { VirtualFileSystem } from '@vitamin-ai/virtual-fs'
-import type { BunRuntime } from '../bun-runtime'
-import type { RuntimeCore } from '../runtime-core'
 import { createAssertModule } from './assert'
 import { createAssertStrictModule } from './assert-strict'
 import { createAsyncHooksModule } from './async-hooks'
@@ -36,6 +33,9 @@ import { createUrlModule } from './url'
 import { createUtilModule } from './util'
 import { createWorkerThreadsModule } from './worker-threads'
 import { createZlibModule } from './zlib'
+import type { VirtualFileSystem } from '@vitamin-ai/virtual-fs'
+import type { BunRuntime } from '../bun-runtime'
+import type { RuntimeCore } from '../runtime-core'
 
 export type CoreModuleMap = Record<string, unknown>
 

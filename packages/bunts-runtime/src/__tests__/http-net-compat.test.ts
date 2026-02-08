@@ -89,6 +89,48 @@ describe('http/https client', () => {
       server.close()
     }
   })
+
+  it('supports options-only request with auth and header helpers', async () => {
+    let resolveReceived: ((value: { auth?: string; header?: string }) => void) | null = null
+    const received = new Promise<{ auth?: string; header?: string }>((resolve) => {
+      resolveReceived = resolve
+    })
+
+    const server = nodeHttp.createServer((req, res) => {
+      res.statusCode = 200
+      res.end('ok')
+      resolveReceived?.({
+        auth: req.headers.authorization as string | undefined,
+        header: req.headers['x-extra'] as string | undefined,
+      })
+    })
+
+    await new Promise<void>((done) => server.listen(0, done))
+    const address = server.address()
+    const port = typeof address === 'object' && address ? address.port : 0
+
+    try {
+      const http = createHttpModule(undefined, 'http:')
+      const req = http.request({ hostname: 'localhost', port, path: '/auth', auth: 'user:pass' }, (res) => {
+        res.text().catch(() => {})
+      })
+      req.setHeader('x-extra', '1')
+      req.end()
+
+      const result = await received
+      expect(result.header).toBe('1')
+      expect(result.auth).toBe(`Basic ${Buffer.from('user:pass').toString('base64')}`)
+    } finally {
+      server.close()
+    }
+  })
+
+  it('exposes METHODS, STATUS_CODES, and globalAgent', () => {
+    const http = createHttpModule(undefined, 'http:')
+    expect(http.METHODS).toContain('GET')
+    expect(http.STATUS_CODES[200]).toBe('OK')
+    expect(http.globalAgent).toBeDefined()
+  })
 })
 
 describe('http server subset', () => {

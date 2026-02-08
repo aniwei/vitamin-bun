@@ -83,10 +83,12 @@ describe('net/tls modules', () => {
     const socket = net.connect({ host: 'example.com', port: 8080 })
 
     const onConnect = vi.fn()
+    const onReady = vi.fn()
     const onData = vi.fn()
     const onClose = vi.fn()
 
     socket.on('connect', onConnect)
+    socket.on('ready', onReady)
     socket.on('data', onData)
     socket.on('close', onClose)
 
@@ -96,6 +98,7 @@ describe('net/tls modules', () => {
     }
 
     expect(onConnect).toHaveBeenCalledOnce()
+    expect(onReady).toHaveBeenCalledOnce()
     expect(openCalls).toEqual([{ host: 'example.com', port: 8080, tls: false }])
 
     const payload = new Uint8Array([1, 2, 3])
@@ -116,6 +119,8 @@ describe('net/tls modules', () => {
       handler({ type: 'net:closed', socketId })
     }
     expect(onClose).toHaveBeenCalledOnce()
+    expect(socket.destroyed).toBe(true)
+    expect(socket.address()).toEqual({ address: '0.0.0.0', port: 0, family: 'IPv4' })
   })
 
   it('emits secureConnect for tls proxy connections', () => {
@@ -147,7 +152,15 @@ describe('net/tls modules', () => {
     }
 
     expect(onSecure).toHaveBeenCalledOnce()
+    expect((socket as { authorized?: boolean }).authorized).toBe(true)
     socket.end()
+  })
+
+  it('sets authorizationError when rejectUnauthorized is false', () => {
+    const tls = createTlsModule()
+    const socket = tls.connect({ host: 'example.com', port: 443, rejectUnauthorized: false })
+    expect((socket as { authorized?: boolean }).authorized).toBe(false)
+    expect((socket as { authorizationError?: Error }).authorizationError).toBeInstanceOf(Error)
   })
 
   it('resolves node:net and node:tls alias', async () => {

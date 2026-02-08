@@ -42,6 +42,15 @@ export function createBunSqliteModule(runtime: BunRuntime): Record<string, unkno
       const db = new SQL.Database()
       return createDatabase(db)
     },
+    openSync(filename: string | SqliteOpenOptions = ':memory:', options?: SqliteOpenOptions) {
+      const resolved = resolveOpenOptions(filename, options)
+      if (resolved.filename && resolved.filename !== ':memory:') {
+        throw new Error('bun:sqlite only supports in-memory databases in browser runtime')
+      }
+      const SQL = blockOnPromise(getSqlJs(runtime, resolved))
+      const db = new SQL.Database()
+      return createDatabase(db)
+    },
     Database: createDatabase,
   }
 }
@@ -130,4 +139,37 @@ function createDatabase(db: SqlJsDatabase) {
       db.close()
     },
   }
+}
+
+function blockOnPromise<T>(promise: Promise<T>): T {
+  if (!canBlock()) {
+    throw new Error('bun:sqlite openSync requires Atomics.wait support')
+  }
+  const state = new Int32Array(new SharedArrayBuffer(4))
+  let value: T | undefined
+  let error: unknown
+  promise
+    .then((result) => {
+      value = result
+      Atomics.store(state, 0, 1)
+      Atomics.notify(state, 0)
+    })
+    .catch((err) => {
+      error = err
+      Atomics.store(state, 0, 1)
+      Atomics.notify(state, 0)
+    })
+
+  while (Atomics.load(state, 0) === 0) {
+    Atomics.wait(state, 0, 0)
+  }
+
+  if (error) {
+    throw error
+  }
+  return value as T
+}
+
+function canBlock(): boolean {
+  return typeof SharedArrayBuffer === 'function' && typeof Atomics?.wait === 'function'
 }

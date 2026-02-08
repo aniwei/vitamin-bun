@@ -60,8 +60,7 @@ describe('bun:* modules', () => {
     const vfs = new VirtualFileSystem()
     vfs.writeFile(
       '/index.ts',
-      `require('bun:sqlite')
-require('bun:ffi')
+      `require('bun:ffi')
 `,
     )
 
@@ -83,18 +82,15 @@ require('bun:ffi')
     vfs.writeFile(
       '/index.ts',
       `const sqlite = require('bun:sqlite')
-(async () => {
-  const db = await sqlite.open(':memory:')
-  db.exec('CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)')
-  db.exec("INSERT INTO users (name) VALUES ('Ada')")
-  const rows = db.query('SELECT name FROM users ORDER BY id')
-  console.log(JSON.stringify(rows))
-  db.close()
-})().catch((err) => {
-  console.error(err)
-})
+const db = sqlite.openSync(':memory:')
+db.exec('CREATE TABLE demo (id INTEGER, name TEXT)')
+db.exec("INSERT INTO demo VALUES (1, 'alice')")
+const rows = db.query('SELECT name FROM demo WHERE id = 1')
+console.log(rows[0].name)
+db.close()
 `,
     )
+
 
     const require = createRequire(import.meta.url)
     const wasmPath = require.resolve('sql.js/dist/sql-wasm.wasm')
@@ -109,14 +105,12 @@ require('bun:ffi')
     })
 
     const code = await runtime.exec('bun', ['run', '/index.ts'])
-    if (code !== 0) {
-      const stderrText = new TextDecoder().decode(concat(stderr))
-      console.log(stderrText)
-    }
-    expect(code).toBe(0)
+    const stderrText = new TextDecoder().decode(concat(stderr))
+    expect(code, stderrText).toBe(0)
 
     const text = new TextDecoder().decode(concat(stdout))
-    expect(text.trim()).toBe('[{"name":"Ada"}]')
+    const lines = text.trim().split('\n')
+    expect(lines[0]).toBe('alice')
   })
 })
 

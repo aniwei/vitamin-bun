@@ -82,6 +82,7 @@ export class RuntimeCore {
           const registryUrl =
             this.options.env?.BUN_INSTALL_REGISTRY ??
             this.options.env?.NPM_CONFIG_REGISTRY
+
           await bunInstall({
             vfs: this.options.vfs,
             cwd: this.evaluator.runtime.process.cwd(),
@@ -89,6 +90,7 @@ export class RuntimeCore {
             stdout: (message) => this.evaluator.runtime.process.stdout.write(message),
             stderr: (message) => this.evaluator.runtime.process.stderr.write(message),
           })
+          
           return 0
         }
 

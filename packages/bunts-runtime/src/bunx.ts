@@ -1,7 +1,7 @@
-import type { VirtualFileSystem } from '@vitamin-ai/virtual-fs'
 import { Minimatch } from 'minimatch'
 import type { BunRuntime } from './bun-runtime'
 import type { BunInstallOptions } from './bun-install'
+import type { VirtualFileSystem } from '@vitamin-ai/virtual-fs'
 
 export type BunxRunnerOptions = {
   vfs: VirtualFileSystem
@@ -44,7 +44,12 @@ export function createBunxRunner(options: BunxRunnerOptions) {
       const cached = cache.get(cacheKey)
       let resolved = cached && isCacheValid(options.vfs, cached)
         ? cached
-        : resolveBunxBinary(options.vfs, cwd, parsed.name, packageSpec.name, packageSpecs)
+        : resolveBunxBinary(
+          options.vfs, 
+          cwd, 
+          parsed.name, 
+          packageSpec.name, 
+          packageSpecs)
 
       if (!resolved && shouldAutoInstall(parsed, options.runtime.process.env)) {
         for (const spec of packageSpecs) {

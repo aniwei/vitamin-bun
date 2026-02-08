@@ -100,6 +100,43 @@ describe('stream module', () => {
     expect(output).toEqual(['OK'])
   })
 
+  it('pipe respects backpressure and resumes', async () => {
+    const vfs = new VirtualFileSystem()
+    const polyfill = createBunRuntime(vfs, {}, () => {}, () => {})
+    const core = createCoreModules(vfs, polyfill)
+
+    const stream = core.stream as {
+      Readable: new () => { push: (d: unknown) => void; pipe: (dest: unknown) => unknown }
+      Writable: new (opts?: { write?: (c: unknown, _e?: string, cb?: (err?: Error | null) => void) => void; highWaterMark?: number }) => {
+        on: (e: string, cb: () => void) => void
+        write: (d: unknown) => boolean
+      }
+    }
+
+    const readable = new stream.Readable()
+    const output: unknown[] = []
+    const writable = new stream.Writable({
+      highWaterMark: 1,
+      write: (chunk, _encoding, cb) => {
+        output.push(chunk)
+        cb?.()
+      },
+    })
+
+    let drained = false
+    writable.on('drain', () => {
+      drained = true
+    })
+
+    readable.pipe(writable)
+    readable.push('a')
+    readable.push('b')
+
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(output).toEqual(['a', 'b'])
+    expect(drained).toBe(true)
+  })
+
   it('resolves node:stream alias', async () => {
     const vfs = new VirtualFileSystem()
     vfs.writeFile('/index', "module.exports = require('node:stream')")

@@ -1,8 +1,14 @@
+import { SimpleEmitter } from '../shared/simple-emitter'
+import { warnUnsupported } from '../shared/warn-unsupported'
+
 type SocketOptions = {
   host?: string
   port?: number
   timeout?: number
   protocols?: string | string[]
+  noDelay?: boolean
+  keepAlive?: boolean
+  keepAliveInitialDelay?: number
 }
 
 type NetProxyBridge = {
@@ -19,53 +25,24 @@ type NetProxyEvent =
   | { type: 'net:closed'; socketId: number }
   | { type: 'net:error'; socketId: number; message: string; code?: string }
 
-const warnOnceKeys = new Set<string>()
-const warnUnsupported = (key: string, message: string) => {
-  if (warnOnceKeys.has(key)) return
-  warnOnceKeys.add(key)
-  console.warn(message)
-}
-
-class SimpleEmitter {
-  private listeners = new Map<string, Set<(...args: unknown[]) => void>>()
-
-  on(event: string, listener: (...args: unknown[]) => void): this {
-    if (!this.listeners.has(event)) this.listeners.set(event, new Set())
-    this.listeners.get(event)!.add(listener)
-    return this
-  }
-
-  once(event: string, listener: (...args: unknown[]) => void): this {
-    const wrapper = (...args: unknown[]) => {
-      this.off(event, wrapper)
-      listener(...args)
-    }
-    return this.on(event, wrapper)
-  }
-
-  off(event: string, listener: (...args: unknown[]) => void): this {
-    this.listeners.get(event)?.delete(listener)
-    return this
-  }
-
-  emit(event: string, ...args: unknown[]): boolean {
-    const set = this.listeners.get(event)
-    if (!set || set.size === 0) return false
-    for (const fn of Array.from(set)) fn(...args)
-    return true
-  }
-}
-
 class Socket extends SimpleEmitter {
   connecting = true
   destroyed = false
+  readable = true
+  writable = true
   bytesWritten = 0
   bytesRead = 0
+  localAddress?: string
+  localPort?: number
+  remoteAddress?: string
+  remotePort?: number
+  remoteFamily: 'IPv4' | 'IPv6' = 'IPv4'
   private ws: WebSocket | null = null
   private sendQueue: Uint8Array[] = []
   private timeoutId: ReturnType<typeof setTimeout> | null = null
   private proxy: NetProxyBridge | null = null
   private proxyId: number | null = null
+  private proxyHandler: ((event: NetProxyEvent) => void) | null = null
 
   connect(url: string, protocols?: string | string[]) {
     if (typeof WebSocket !== 'function') {
@@ -86,6 +63,7 @@ class Socket extends SimpleEmitter {
       for (const chunk of this.sendQueue) ws.send(chunk)
       this.sendQueue = []
       this.emit('connect')
+      this.emit('ready')
     })
 
     ws.addEventListener('message', (event) => {
@@ -98,14 +76,14 @@ class Socket extends SimpleEmitter {
     })
 
     ws.addEventListener('close', () => {
-      this.destroyed = true
-      this.emit('close')
+      this.finalizeClose()
     })
 
     ws.addEventListener('error', () => {
       const err = new Error('WebSocket connection error') as Error & { code?: string }
       err.code = 'ECONNREFUSED'
       this.emit('error', err)
+      this.finalizeClose()
     })
   }
 
@@ -120,12 +98,15 @@ class Socket extends SimpleEmitter {
     this.proxy = proxy
     const socketId = proxy.open(host, port, tls)
     this.proxyId = socketId
+    this.remoteAddress = host
+    this.remotePort = port
 
     const handler = (event: NetProxyEvent) => {
       if (event.socketId !== socketId) return
       if (event.type === 'net:connected') {
         this.connecting = false
         this.emit('connect')
+        this.emit('ready')
         return
       }
       if (event.type === 'net:data') {
@@ -134,8 +115,7 @@ class Socket extends SimpleEmitter {
         return
       }
       if (event.type === 'net:closed') {
-        this.destroyed = true
-        this.emit('close')
+        this.finalizeClose()
         proxy.off(socketId, handler)
         return
       }
@@ -143,13 +123,16 @@ class Socket extends SimpleEmitter {
         const err = new Error(event.message) as Error & { code?: string }
         if (event.code) err.code = event.code
         this.emit('error', err)
+        this.finalizeClose()
       }
     }
 
+    this.proxyHandler = handler
     proxy.on(socketId, handler)
   }
 
   write(data?: string | Uint8Array) {
+    if (this.destroyed) return false
     if (data === undefined) return false
     const bytes = typeof data === 'string' ? new TextEncoder().encode(data) : data
     this.bytesWritten += bytes.byteLength
@@ -166,7 +149,10 @@ class Socket extends SimpleEmitter {
   }
 
   end(data?: string | Uint8Array) {
+    if (this.destroyed) return this
     if (data !== undefined) this.write(data)
+    this.writable = false
+    queueMicrotask(() => this.emit('finish'))
     if (this.proxy && this.proxyId !== null) {
       this.proxy.close(this.proxyId)
       return this
@@ -176,13 +162,14 @@ class Socket extends SimpleEmitter {
   }
 
   destroy(err?: Error) {
+    if (this.destroyed) return this
     if (err) this.emit('error', err)
     if (this.proxy && this.proxyId !== null) {
       this.proxy.close(this.proxyId)
     } else {
       this.ws?.close()
     }
-    this.destroyed = true
+    this.finalizeClose()
     return this
   }
 
@@ -205,6 +192,50 @@ class Socket extends SimpleEmitter {
     warnUnsupported('net.keepalive', 'net.setKeepAlive is not supported in browser runtime')
     return this
   }
+
+  pause() {
+    warnUnsupported('net.pause', 'net.pause is not supported in browser runtime')
+    return this
+  }
+
+  resume() {
+    warnUnsupported('net.resume', 'net.resume is not supported in browser runtime')
+    return this
+  }
+
+  ref() {
+    warnUnsupported('net.ref', 'net.ref is not supported in browser runtime')
+    return this
+  }
+
+  unref() {
+    warnUnsupported('net.unref', 'net.unref is not supported in browser runtime')
+    return this
+  }
+
+  address() {
+    return {
+      address: this.localAddress ?? '0.0.0.0',
+      port: this.localPort ?? 0,
+      family: this.remoteFamily,
+    }
+  }
+
+  private finalizeClose() {
+    if (this.destroyed) return
+    this.destroyed = true
+    this.readable = false
+    this.writable = false
+    if (this.proxy && this.proxyId !== null && this.proxyHandler) {
+      this.proxy.off(this.proxyId, this.proxyHandler)
+      this.proxyHandler = null
+    }
+    if (this.timeoutId) {
+      clearTimeout(this.timeoutId)
+      this.timeoutId = null
+    }
+    this.emit('close')
+  }
 }
 
 export function createSocketStub() {
@@ -223,6 +254,12 @@ export function createNetModule() {
     if (typeof host === 'function') socket.once('connect', host)
     const targetHost = normalized.host ?? 'localhost'
     const targetPort = normalized.port ?? 80
+    socket.remoteAddress = targetHost
+    socket.remotePort = targetPort
+    if (normalized.noDelay) socket.setNoDelay()
+    if (normalized.keepAlive) socket.setKeepAlive()
+    if (normalized.timeout) socket.setTimeout(normalized.timeout)
+      
     const proxy = getNetProxy()
     if (proxy) {
       socket.connectViaProxy(targetHost, targetPort, false)
@@ -235,7 +272,7 @@ export function createNetModule() {
 
   const createConnection = connect
 
-  return { connect, createConnection, Socket }
+  return { connect, createConnection, Socket, createSocket: connect }
 }
 
 function normalizeOptions(

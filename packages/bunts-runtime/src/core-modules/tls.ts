@@ -1,4 +1,5 @@
 import { createSocketStub } from './net'
+import { warnUnsupported } from '../shared/warn-unsupported'
 
 type TlsOptions = {
   host?: string
@@ -6,13 +7,6 @@ type TlsOptions = {
   servername?: string
   rejectUnauthorized?: boolean
   protocols?: string | string[]
-}
-
-const warnOnceKeys = new Set<string>()
-const warnUnsupported = (key: string, message: string) => {
-  if (warnOnceKeys.has(key)) return
-  warnOnceKeys.add(key)
-  console.warn(message)
 }
 
 export function createTlsModule() {
@@ -24,7 +18,10 @@ export function createTlsModule() {
     const socket = createSocketStub()
     const normalized = normalizeOptions(options, host)
 
+    ;(socket as { encrypted?: boolean }).encrypted = true
+    ;(socket as { authorized?: boolean }).authorized = normalized.rejectUnauthorized !== false
     if (normalized.rejectUnauthorized === false) {
+      ;(socket as { authorizationError?: Error }).authorizationError = new Error('UNAUTHORIZED')
       warnUnsupported('tls.rejectUnauthorized', 'tls.rejectUnauthorized is not supported in browser runtime')
     }
 
@@ -34,7 +31,10 @@ export function createTlsModule() {
     if (connectListener) socket.once('secureConnect', connectListener)
     if (typeof host === 'function') socket.once('secureConnect', host)
 
-    socket.on('connect', () => socket.emit('secureConnect'))
+    socket.on('connect', () => {
+      socket.emit('secureConnect')
+      socket.emit('ready')
+    })
 
     if ('connectViaProxy' in socket && typeof socket.connectViaProxy === 'function') {
       socket.connectViaProxy(targetHost, targetPort, true)
@@ -45,7 +45,7 @@ export function createTlsModule() {
     return socket
   }
 
-  return { connect }
+  return { connect, createConnection: connect }
 }
 
 function normalizeOptions(

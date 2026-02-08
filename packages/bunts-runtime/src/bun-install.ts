@@ -114,12 +114,14 @@ function readPackageJson(vfs: VirtualFileSystem, path: string): PackageJson {
   if (!vfs.exists(path)) {
     throw new Error(`package.json not found at ${path}`)
   }
+
   const text = vfs.readFile(path)
   return JSON.parse(text) as PackageJson
 }
 
 async function fetchJson<T>(fetchImpl: typeof fetch, url: string): Promise<T> {
   const response = await fetchImpl(url)
+
   if (!response.ok) {
     throw new Error(`Failed to fetch ${url}: ${response.status}`)
   }
@@ -146,6 +148,7 @@ function resolveVersion(spec: string, metadata: RegistryMetadata): string {
 
   const candidates = Object.keys(metadata.versions).filter((version) => satisfiesRange(version, normalized))
   const selected = maxVersion(candidates)
+
   if (!selected) throw new Error(`No matching version for ${spec}`)
   return selected
 }
@@ -153,11 +156,15 @@ function resolveVersion(spec: string, metadata: RegistryMetadata): string {
 function parseVersion(version: string): { major: number; minor: number; patch: number } | null {
   const clean = version.split('-')[0]
   const parts = clean.split('.')
+
   if (parts.length < 3) return null
+  
   const major = Number(parts[0])
   const minor = Number(parts[1])
   const patch = Number(parts[2])
+  
   if (Number.isNaN(major) || Number.isNaN(minor) || Number.isNaN(patch)) return null
+  
   return { major, minor, patch }
 }
 

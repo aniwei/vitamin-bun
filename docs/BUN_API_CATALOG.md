@@ -25,12 +25,12 @@ Status legend: implemented | partial | missing
 | --- | --- | --- |
 | fetch | partial | Browser fetch available; Node-compatible options limited. |
 | WebSocket | partial | SW cannot proxy native WebSocket; tunnel uses WS. |
-| HTTP client (http/https) | partial | fetch-backed client; Agent limited. |
+| HTTP client (http/https) | implemented | fetch-backed client; Agent is compatibility shim. |
 | HTTP server | partial | Bun.serve + SW interception. |
-| net/tls sockets | partial | WS tunnel + SW fetch-stream proxy. |
+| net/tls sockets | partial | Proxy-backed sockets with connect/ready/timeout events; no native TCP. |
 | fs (core) | partial | VFS implemented; permissions/links partial. |
 | fs/promises | partial | VFS-backed. |
-| stream | partial | Core stream subset only. |
+| stream | implemented | Readable/Writable/Duplex/Transform/PassThrough with basic backpressure; browser constraints apply. |
 
 ### Fetch extensions
 
@@ -119,7 +119,7 @@ See [docs/NETWORK_IO_TESTS.md](docs/NETWORK_IO_TESTS.md) for the coverage map an
 
 | Module | Status | Notes |
 | --- | --- | --- |
-| bun:sqlite | partial | WASM-backed via sql.js; in-memory only unless persistence is wired; requires wasm URL or binary. |
+| bun:sqlite | implemented | WASM-backed via sql.js; in-memory only unless persistence is wired; requires wasm URL or binary. |
 | bun:ffi | partial | Emits clear error in browser runtime; host/plugin support not wired. |
 | bun:jsc | missing | Not applicable. |
 | bun:transpiler | partial | Minimal `transpile()` surface backed by runtime transpiler. |
@@ -130,30 +130,32 @@ See [docs/NETWORK_IO_TESTS.md](docs/NETWORK_IO_TESTS.md) for the coverage map an
 
 - CLI commands are only available through RuntimeCore `exec`; only `bun run` and `bun install` are wired today.
 - `bun install` scripts are gated (disabled by default) in browser runtimes; require explicit opt-in and a script runner.
-- bun:* modules are placeholders; none are bundled in the browser runtime yet.
+- bun:sqlite is WASM-backed and requires a wasm asset; bun:ffi remains unavailable in browser runtime.
 
 ## Phase 2+ Test Coverage
 
 - CLI command tests: partial (bunx coverage).
-- bun:* module tests: partial (glob/semver/transpiler coverage).
+- bun:* module tests: partial (glob/semver/transpiler/sqlite coverage).
 
 ## Node Compatibility (core modules)
 
 | Module | Status | Notes |
 | --- | --- | --- |
 | assert | implemented | Core module.
+| async_hooks | implemented | AsyncResource + AsyncLocalStorage with browser async propagation.
 | buffer | implemented | Core module.
-| crypto | partial | Limited WebCrypto mapping.
+| crypto | partial | Hash/HMAC/PBKDF2/AES-GCM/randomUUID supported via WebCrypto; key objects and scrypt not available.
 | events | implemented | Core module.
 | fs | partial | VFS-backed.
-| http/https | partial | fetch-backed.
-| net/tls | partial | WS tunnel.
+| http/https | implemented | fetch-backed with Agent shim; browser constraints apply.
+| net/tls | partial | Proxy-backed sockets with Node-like events; no native TCP/TLS.
 | path | implemented | Core module.
-| process | partial | Browser runtime values.
-| stream | partial | Subset.
+| perf_hooks | implemented | Browser Performance-based entries/observer/timerify; event-loop stats unavailable.
+| process | implemented | Browser runtime values; no signals/TTY/process control.
+| stream | implemented | Readable/Writable/Duplex/Transform/PassThrough with basic backpressure.
 | timers | implemented | Core module.
 | url | implemented | Core module.
-| worker_threads | partial | WebWorker-backed.
+| worker_threads | partial | WebWorker-backed; parentPort and workerData supported in worker scope; MessageChannel available.
 
 ## Catalog Notes
 - This catalog is phased; Phase 1 focuses on Network + IO.

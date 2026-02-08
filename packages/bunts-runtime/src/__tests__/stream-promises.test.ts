@@ -43,6 +43,20 @@ describe('stream/promises module', () => {
     expect(output).toEqual(['OK'])
   })
 
+  it('finished resolves', async () => {
+    const vfs = new VirtualFileSystem()
+    const polyfill = createBunRuntime(vfs, {}, () => {}, () => {})
+    const core = createCoreModules(vfs, polyfill)
+
+    const stream = core.stream as { Writable: new () => { end: () => void } }
+    const streamPromises = core['stream/promises'] as { finished: (input: unknown) => Promise<void> }
+
+    const writable = new stream.Writable()
+    const done = streamPromises.finished(writable)
+    writable.end()
+    await expect(done).resolves.toBeUndefined()
+  })
+
   it('resolves node:stream/promises alias', async () => {
     const vfs = new VirtualFileSystem()
     vfs.writeFile('/index', "module.exports = require('node:stream/promises')")

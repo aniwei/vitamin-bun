@@ -1,5 +1,8 @@
-## MODIFIED Requirements
+# bunts-runtime-bun-modules Specification
 
+## Purpose
+TBD - created by archiving change add-bunts-runtime-bun-sqlite-wasm. Update Purpose after archive.
+## Requirements
 ### Requirement: bun:sqlite module
 The runtime SHALL expose a `bun:sqlite` module backed by a WASM SQLite implementation suitable for browser environments.
 
@@ -13,3 +16,4 @@ The runtime SHALL document browser-specific limitations for bun:sqlite (memory l
 #### Scenario: Initialization in browser
 - **WHEN** bun:sqlite initializes in browser runtime
 - **THEN** it reports any constraints or fallback behavior in documentation
+
