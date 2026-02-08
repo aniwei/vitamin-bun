@@ -16,6 +16,7 @@ export type WorkerInMessage =
   | { type: 'fs:write'; path: string; content: string | Uint8Array }
   | { type: 'fs:mkdir'; path: string }
   | { type: 'fs:unlink'; path: string }
+  | { type: 'fs:rename'; from: string; to: string }
   | { type: 'stdin'; data: Uint8Array }
   | { type: 'kill'; id: number }
 
@@ -26,6 +27,9 @@ export type WorkerOutMessage =
   | { type: 'stderr'; data: Uint8Array }
   | { type: 'exit'; id: number; code: number }
   | { type: 'error'; message: string }
+  | { type: 'vfs:create'; path: string; kind: 'file' | 'directory' }
+  | { type: 'vfs:delete'; path: string; kind: 'file' | 'directory' }
+  | { type: 'vfs:move'; from: string; to: string; kind: 'file' | 'directory' }
   | { type: 'serve:register'; port: number }
   | { type: 'serve:unregister'; port: number }
   | { type: 'serve:response'; requestId: number; status: number; headers: Record<string, string>; body: Uint8Array | null; stream: boolean }

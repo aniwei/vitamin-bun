@@ -165,6 +165,11 @@ export class WasmWorker {
     this.postMessage({ type: 'fs:unlink', path })
   }
 
+  /** Rename or move a file in the worker VFS. */
+  rename(from: string, to: string): void {
+    this.postMessage({ type: 'fs:rename', from, to })
+  }
+
   /** Kill a running process. */
   kill(id: number): void {
     this.postMessage({ type: 'kill', id })

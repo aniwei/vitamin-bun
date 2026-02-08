@@ -91,6 +91,10 @@ class BunContainerImpl implements BunContainer {
         this.vfs.unlink(path)
         this.worker.unlink(path)
       },
+      rename: async (from: string, to: string): Promise<void> => {
+        this.vfs.rename(from, to)
+        this.worker.rename(from, to)
+      },
       exists: async (path: string): Promise<boolean> => {
         return this.vfs.exists(path)
       },
@@ -276,6 +280,21 @@ export async function createBunContainer(
     allowedHosts: options.allowedHosts,
   })
   await worker.boot(initialFiles)
+
+  if (options.onVfsCreate || options.onVfsDelete || options.onVfsMove) {
+    worker.on('vfs:create', (msg) => {
+      if (msg.type !== 'vfs:create') return
+      options.onVfsCreate?.({ path: msg.path, kind: msg.kind })
+    })
+    worker.on('vfs:delete', (msg) => {
+      if (msg.type !== 'vfs:delete') return
+      options.onVfsDelete?.({ path: msg.path, kind: msg.kind })
+    })
+    worker.on('vfs:move', (msg) => {
+      if (msg.type !== 'vfs:move') return
+      options.onVfsMove?.({ from: msg.from, to: msg.to, kind: msg.kind })
+    })
+  }
 
   if (options.onServeStart) {
     worker.on('serve:register', (msg) => {

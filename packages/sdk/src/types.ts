@@ -37,6 +37,12 @@ export interface ContainerOptions {
   env?: Record<string, string>
   /** Callback when a Bun.serve server starts. */
   onServeStart?: (url: string) => void
+  /** Callback when a file is created in the VFS. */
+  onVfsCreate?: (event: { path: string; kind: 'file' | 'directory' }) => void
+  /** Callback when a file is deleted in the VFS. */
+  onVfsDelete?: (event: { path: string; kind: 'file' | 'directory' }) => void
+  /** Callback when a file or directory is moved in the VFS. */
+  onVfsMove?: (event: { from: string; to: string; kind: 'file' | 'directory' }) => void
   /**
    * Hostnames that the container is allowed to make network requests to.
    * If omitted, all hosts are allowed.
@@ -77,6 +83,7 @@ export interface ContainerFS {
   mkdir(path: string): Promise<void>
   readdir(path: string): Promise<string[]>
   unlink(path: string): Promise<void>
+  rename(from: string, to: string): Promise<void>
   exists(path: string): Promise<boolean>
   save(): Promise<VfsSnapshot>
   restore(snapshot: VfsSnapshot): Promise<void>

@@ -31,8 +31,14 @@ export class VirtualFileSystem {
   private root: Inode
   /** Next file descriptor number. */
   private nextFd = 3 // 0=stdin, 1=stdout, 2=stderr are reserved
+  private onCreate?: VFSOptions['onCreate']
+  private onDelete?: VFSOptions['onDelete']
+  private onMove?: VFSOptions['onMove']
 
   constructor(_options?: VFSOptions) {
+    this.onCreate = _options?.onCreate
+    this.onDelete = _options?.onDelete
+    this.onMove = _options?.onMove
     this.root = createDirectoryInode()
     this.inodes.set(this.root.ino, this.root)
   }
@@ -114,12 +120,14 @@ export class VirtualFileSystem {
     const dir = createDirectoryInode()
     this.inodes.set(dir.ino, dir)
     parent.children.set(name, dir.ino)
+    this.onCreate?.({ path, kind: 'directory' })
   }
 
   /** Create directories recursively (like `mkdir -p`). */
   mkdirp(path: string): void {
     const parts = this.segments(path)
     let current = this.root
+    let currentPath = ''
 
     for (const part of parts) {
       let childIno = current.children.get(part)
@@ -128,6 +136,10 @@ export class VirtualFileSystem {
         this.inodes.set(dir.ino, dir)
         current.children.set(part, dir.ino)
         childIno = dir.ino
+        currentPath = `${currentPath}/${part}`.replace(/\/+/g, '/')
+        this.onCreate?.({ path: currentPath || '/', kind: 'directory' })
+      } else {
+        currentPath = `${currentPath}/${part}`.replace(/\/+/g, '/')
       }
       const child = this.inodes.get(childIno)
       if (!child || child.kind !== InodeKind.Directory) {
@@ -184,6 +196,7 @@ export class VirtualFileSystem {
     const file = createFileInode(data)
     this.inodes.set(file.ino, file)
     parent.children.set(name, file.ino)
+    this.onCreate?.({ path, kind: 'file' })
   }
 
   /** Read a file as a Uint8Array. */
@@ -216,6 +229,7 @@ export class VirtualFileSystem {
     }
     parent.children.delete(name)
     this.inodes.delete(ino)
+    this.onDelete?.({ path, kind: 'file' })
   }
 
   /** Remove an empty directory. */
@@ -235,6 +249,29 @@ export class VirtualFileSystem {
     }
     parent.children.delete(name)
     this.inodes.delete(ino)
+    this.onDelete?.({ path, kind: 'directory' })
+  }
+
+  /** Move or rename a file or directory. */
+  rename(from: string, to: string): void {
+    const fromResult = this.resolveParent(from)
+    if (!fromResult) throw new Error(`ENOENT: ${from} not found`)
+    const toResult = this.resolveParent(to)
+    if (!toResult) throw new Error(`ENOENT: parent not found for ${to}`)
+
+    const { parent: fromParent, name: fromName } = fromResult
+    const { parent: toParent, name: toName } = toResult
+    const ino = fromParent.children.get(fromName)
+    if (ino === undefined) throw new Error(`ENOENT: ${from} not found`)
+    if (toParent.children.has(toName)) {
+      throw new Error(`EEXIST: ${to} already exists`)
+    }
+
+    fromParent.children.delete(fromName)
+    toParent.children.set(toName, ino)
+    const inode = this.inodes.get(ino)
+    const kind = inode?.kind === InodeKind.Directory ? 'directory' : 'file'
+    this.onMove?.({ from, to, kind })
   }
 
   /** Get file/directory metadata. */

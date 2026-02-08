@@ -280,8 +280,16 @@ export class ModuleLoader {
         const pkgEntry = this.resolvePackageEntry(path)
         if (pkgEntry) return pkgEntry
       } else {
+        if (extname(path) === '.node') {
+          throw new Error(`Native addon not supported: ${path}`)
+        }
         return path
       }
+    }
+
+    const nativeCandidate = `${path}.node`
+    if (this.vfs.exists(nativeCandidate)) {
+      throw new Error(`Native addon not supported: ${nativeCandidate}`)
     }
 
     const candidates = [

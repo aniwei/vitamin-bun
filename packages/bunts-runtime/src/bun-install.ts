@@ -32,6 +32,8 @@ export type BunInstallOptions = {
     optional: boolean
     shouldContinue: boolean
   }) => void
+  retryCount?: number
+  retryDelayMs?: number
   fetchImpl?: typeof fetch
   enableScripts?: boolean
   runScript?: (command: string, cwd: string) => Promise<void>
@@ -97,6 +99,17 @@ export async function bunInstall(options: BunInstallOptions): Promise<void> {
   const lockfile: Lockfile = { dependencies: {} }
   const seenRequests = new Set<string>()
 
+  const existingLockfile = readLockfileSafe(vfs, joinPath(cwd, 'bun.lock'))
+  if (existingLockfile) {
+    for (const [name, entry] of Object.entries(existingLockfile.dependencies ?? {})) {
+      const installPath = resolveNodeModulesPath(cwd, name)
+      if (vfs.exists(installPath)) {
+        installed.set(name, entry)
+        lockfile.dependencies[name] = entry
+      }
+    }
+  }
+
   const pushRequest = (request: InstallRequest) => {
     if (seenRequests.has(request.name)) return
     seenRequests.add(request.name)
@@ -107,7 +120,9 @@ export async function bunInstall(options: BunInstallOptions): Promise<void> {
   vfs.mkdirp(joinPath(cwd, 'node_modules'))
 
   for (const [name, spec] of Object.entries(deps)) {
-    pushRequest({ name, spec, optional: false })
+    if (!installed.has(name)) {
+      pushRequest({ name, spec, optional: false })
+    }
   }
 
   while (installQueue.length > 0) {
@@ -130,6 +145,9 @@ export async function bunInstall(options: BunInstallOptions): Promise<void> {
         onProgress: options.onProgress,
         onPackageCount: options.onPackageCount,
         onDownloadProgress: options.onDownloadProgress,
+        onDownloadError: options.onDownloadError,
+        retryCount: options.retryCount,
+        retryDelayMs: options.retryDelayMs,
         enableScripts,
         runScript: options.runScript,
       })
@@ -404,7 +422,7 @@ function isZeroBlock(block: Uint8Array): boolean {
   return true
 }
 
-function isGzip(buffer: ArrayBuffer): boolean {
+function isGzip(buffer: ArrayBufferLike): boolean {
   const bytes = new Uint8Array(buffer)
   return bytes.length >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b
 }
@@ -463,6 +481,20 @@ function normalizeRoot(path: string): string {
 
 function fail(message: string): never {
   throw new Error(message)
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function readLockfileSafe(vfs: VirtualFileSystem, path: string): Lockfile | null {
+  if (!vfs.exists(path)) return null
+  try {
+    const text = vfs.readFile(path)
+    return JSON.parse(text) as Lockfile
+  } catch {
+    return null
+  }
 }
 
 function collectRootDependencies(pkg: PackageJson): Record<string, string> {
@@ -562,6 +594,8 @@ async function installDependency(params: {
     optional: boolean
     shouldContinue: boolean
   }) => void
+  retryCount?: number
+  retryDelayMs?: number
   enableScripts: boolean
   runScript?: (command: string, cwd: string) => Promise<void>
 }): Promise<LockfileEntry> {
@@ -634,34 +668,48 @@ async function installDependency(params: {
 
   params.onProgress?.({ phase: 'download', name: request.name, spec: request.spec, version })
   const tarballUrl = rewriteTarballUrl(dist.tarball, registryUrl)
-  let tarball: ArrayBuffer
-  try {
-    tarball = await fetchArrayBuffer(fetchImpl, tarballUrl, (received, total) => {
-      const percent = total ? Math.round((received / total) * 100) : undefined
-      params.onDownloadProgress?.({ name: request.name, spec: request.spec, version, received, total, percent })
-    })
-    const tarballBytes = new Uint8Array(tarball)
-    if (dist.integrity) {
-      await verifyIntegrity(tarballBytes, dist.integrity)
+  const maxRetries = params.retryCount ?? 2
+  const retryDelayMs = params.retryDelayMs ?? 500
+  let tarballBytes: Uint8Array | null = null
+  let attempt = 0
+
+  while (attempt <= maxRetries) {
+    try {
+      const tarball = await fetchArrayBuffer(fetchImpl, tarballUrl, (received, total) => {
+        const percent = total ? Math.round((received / total) * 100) : undefined
+        params.onDownloadProgress?.({ name: request.name, spec: request.spec, version, received, total, percent })
+      })
+      tarballBytes = new Uint8Array(tarball)
+      if (dist.integrity) {
+        await verifyIntegrity(tarballBytes, dist.integrity)
+      }
+      break
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      const shouldRetry = attempt < maxRetries
+      params.onDownloadError?.({
+        name: request.name,
+        spec: request.spec,
+        version,
+        url: tarballUrl,
+        message: shouldRetry ? `${message} (retry ${attempt + 1}/${maxRetries})` : message,
+        optional: request.optional,
+        shouldContinue: request.optional,
+      })
+      params.onProgress?.({ phase: 'error', name: request.name, spec: request.spec, version, message })
+      if (!shouldRetry) {
+        throw err
+      }
+      await delay(retryDelayMs * Math.pow(2, attempt))
+      attempt += 1
     }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
-    params.onDownloadError?.({
-      name: request.name,
-      spec: request.spec,
-      version,
-      url: tarballUrl,
-      message,
-      optional: request.optional,
-      shouldContinue: request.optional,
-    })
-    params.onProgress?.({ phase: 'error', name: request.name, spec: request.spec, version, message })
-    throw err
   }
 
-  const tarballBytes = new Uint8Array(tarball)
+  if (!tarballBytes) {
+    throw new Error(`Failed to download ${request.name}@${version}`)
+  }
   params.onProgress?.({ phase: 'extract', name: request.name, spec: request.spec, version })
-  const tarData = isGzip(tarball) ? await gunzip(tarballBytes) : tarballBytes
+  const tarData = isGzip(tarballBytes.buffer) ? await gunzip(tarballBytes) : tarballBytes
 
   const installPath = resolveNodeModulesPath(cwd, request.name)
   extractTarToVfs(vfs, tarData, installPath)

@@ -102,4 +102,28 @@ export interface MountPoint {
 export interface VFSOptions {
   /** Initial mount points. */
   mounts?: MountPoint[]
+  /** Callback for file or directory creation. */
+  onCreate?: (event: VfsCreateEvent) => void
+  /** Callback for file or directory deletion. */
+  onDelete?: (event: VfsDeleteEvent) => void
+  /** Callback for file or directory moves. */
+  onMove?: (event: VfsMoveEvent) => void
+}
+
+export type VfsEntryKind = 'file' | 'directory'
+
+export type VfsCreateEvent = {
+  path: string
+  kind: VfsEntryKind
+}
+
+export type VfsDeleteEvent = {
+  path: string
+  kind: VfsEntryKind
+}
+
+export type VfsMoveEvent = {
+  from: string
+  to: string
+  kind: VfsEntryKind
 }

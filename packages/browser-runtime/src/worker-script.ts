@@ -152,7 +152,11 @@ function seedFile(fs: VirtualFileSystem, filePath: string, content: string | Uin
 async function handleInit(msg: InitMessage): Promise<void> {
   try {
     // 1. Create VFS and seed initial files
-    vfs = new VirtualFileSystem()
+    vfs = new VirtualFileSystem({
+      onCreate: (event) => post({ type: 'vfs:create', path: event.path, kind: event.kind }),
+      onDelete: (event) => post({ type: 'vfs:delete', path: event.path, kind: event.kind }),
+      onMove: (event) => post({ type: 'vfs:move', from: event.from, to: event.to, kind: event.kind }),
+    })
 
     for (const [path, content] of Object.entries(msg.files ?? {})) {
       seedFile(vfs, path, content)
@@ -231,6 +235,11 @@ function handleFsMkdir(msg: FsMkdirMessage): void {
 function handleFsUnlink(msg: FsUnlinkMessage): void {
   if (!vfs) return
   if (vfs.exists(msg.path)) vfs.unlink(msg.path)
+}
+
+function handleFsRename(msg: { type: 'fs:rename'; from: string; to: string }): void {
+  if (!vfs) return
+  vfs.rename(msg.from, msg.to)
 }
 
 function handleNetMessage(msg: NetConnectedMessage | NetDataMessage | NetClosedMessage | NetErrorMessage): void {
@@ -324,6 +333,9 @@ self.onmessage = async (event: MessageEvent<IncomingMessage>) => {
       break
     case 'fs:unlink':
       handleFsUnlink(msg)
+      break
+    case 'fs:rename':
+      handleFsRename(msg)
       break
     case 'net:connected':
     case 'net:data':
