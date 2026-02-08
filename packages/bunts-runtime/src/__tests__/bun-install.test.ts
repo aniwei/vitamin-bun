@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
+import { createHash } from 'crypto'
 import { VirtualFileSystem } from '../../../virtual-fs/src/index'
 import { bunInstall } from '../bun-install'
 import { RuntimeCore } from '../runtime-core'
@@ -19,12 +20,15 @@ describe('bun install', () => {
       'package/index.js': 'module.exports = 42',
     })
 
-    mockRegistryFetch({
-      packageName: 'demo',
-      tarballUrl: 'https://registry.npmjs.org/demo/-/demo-1.2.0.tgz',
-      tarball,
-      versions: ['1.0.0', '1.2.0'],
-    })
+    mockRegistryFetch([
+      {
+        name: 'demo',
+        versions: [
+          { version: '1.0.0', tarball },
+          { version: '1.2.0', tarball },
+        ],
+      },
+    ])
 
     await bunInstall({ vfs, cwd: '/' })
 
@@ -41,12 +45,12 @@ describe('bun install', () => {
       'package/index.js': 'module.exports = 1',
     })
 
-    mockRegistryFetch({
-      packageName: 'demo',
-      tarballUrl: 'https://registry.npmjs.org/demo/-/demo-1.0.0.tgz',
-      tarball,
-      versions: ['1.0.0'],
-    })
+    mockRegistryFetch([
+      {
+        name: 'demo',
+        versions: [{ version: '1.0.0', tarball }],
+      },
+    ])
 
     const runtime = new RuntimeCore({ vfs })
     const code = await runtime.exec('bun', ['install'])
@@ -54,36 +58,132 @@ describe('bun install', () => {
     expect(code).toBe(0)
     expect(vfs.exists('/node_modules/demo/index.js')).toBe(true)
   })
+
+  it('installs transitive dependencies', async () => {
+    const vfs = new VirtualFileSystem()
+    vfs.writeFile('/package.json', JSON.stringify({ dependencies: { demo: '^1.0.0' } }))
+
+    const depTarball = createTar({
+      'package/package.json': JSON.stringify({ name: 'dep', version: '2.1.0' }),
+      'package/index.js': 'module.exports = 7',
+    })
+    const demoTarball = createTar({
+      'package/package.json': JSON.stringify({
+        name: 'demo',
+        version: '1.1.0',
+        dependencies: { dep: '^2.0.0' },
+      }),
+      'package/index.js': 'module.exports = 42',
+    })
+
+    mockRegistryFetch([
+      {
+        name: 'demo',
+        versions: [{ version: '1.1.0', tarball: demoTarball }],
+      },
+      {
+        name: 'dep',
+        versions: [{ version: '2.1.0', tarball: depTarball }],
+      },
+    ])
+
+    await bunInstall({ vfs, cwd: '/' })
+
+    expect(vfs.exists('/node_modules/demo/index.js')).toBe(true)
+    expect(vfs.exists('/node_modules/dep/index.js')).toBe(true)
+  })
+
+  it('fails integrity checks for corrupted tarballs', async () => {
+    const vfs = new VirtualFileSystem()
+    vfs.writeFile('/package.json', JSON.stringify({ dependencies: { demo: '1.0.0' } }))
+
+    const tarball = createTar({
+      'package/package.json': JSON.stringify({ name: 'demo', version: '1.0.0' }),
+      'package/index.js': 'module.exports = 2',
+    })
+    const integrity = `sha512-${createHash('sha512').update(new TextEncoder().encode('wrong')).digest('base64')}`
+
+    mockRegistryFetch([
+      {
+        name: 'demo',
+        versions: [{ version: '1.0.0', tarball, integrity }],
+      },
+    ])
+
+    await expect(bunInstall({ vfs, cwd: '/' })).rejects.toThrow('Integrity check failed')
+  })
+
+  it('installs workspace dependencies locally', async () => {
+    const vfs = new VirtualFileSystem()
+    vfs.mkdirp('/packages/local-lib')
+    vfs.writeFile(
+      '/package.json',
+      JSON.stringify({
+        workspaces: ['packages/*'],
+        dependencies: { 'local-lib': 'workspace:*' },
+      }),
+    )
+    vfs.writeFile(
+      '/packages/local-lib/package.json',
+      JSON.stringify({ name: 'local-lib', version: '0.1.0' }),
+    )
+    vfs.writeFile('/packages/local-lib/index.js', 'module.exports = 3')
+
+    globalThis.fetch = vi.fn(async () => {
+      throw new Error('registry fetch should not be called')
+    }) as typeof fetch
+
+    await bunInstall({ vfs, cwd: '/' })
+
+    expect(vfs.exists('/node_modules/local-lib/index.js')).toBe(true)
+  })
 })
 
-function mockRegistryFetch(params: {
-  packageName: string
-  tarballUrl: string
-  tarball: Uint8Array
-  versions: string[]
-}): void {
-  const metadata = {
-    'dist-tags': { latest: params.versions[params.versions.length - 1] },
-    versions: Object.fromEntries(
-      params.versions.map((version) => [
-        version,
-        {
-          dist: {
-            tarball: params.tarballUrl.replace(/\d+\.\d+\.\d+/, version),
+function mockRegistryFetch(packages: Array<{
+  name: string
+  versions: Array<{ version: string; tarball: Uint8Array; integrity?: string }>
+}>): void {
+  const metadataMap = new Map<string, { metadata: unknown; tarballs: Map<string, Uint8Array> }>()
+
+  for (const pkg of packages) {
+    const tarballs = new Map<string, Uint8Array>()
+    const versions = Object.fromEntries(
+      pkg.versions.map((entry) => {
+        const tarballUrl = `https://registry.npmjs.org/${pkg.name}/-/${pkg.name}-${entry.version}.tgz`
+        tarballs.set(tarballUrl, entry.tarball)
+        return [
+          entry.version,
+          {
+            dist: {
+              tarball: tarballUrl,
+              integrity: entry.integrity,
+            },
           },
-        },
-      ]),
-    ),
+        ]
+      }),
+    )
+    metadataMap.set(pkg.name, {
+      metadata: {
+        'dist-tags': { latest: pkg.versions[pkg.versions.length - 1].version },
+        versions,
+      },
+      tarballs,
+    })
   }
 
   globalThis.fetch = vi.fn(async (url: string | URL) => {
     const href = String(url)
-    if (href.endsWith('.tgz')) {
-      return new Response(params.tarball)
+    for (const { tarballs } of metadataMap.values()) {
+      const tarball = tarballs.get(href)
+      if (tarball) return new Response(tarball)
     }
-    if (href.includes(encodeURIComponent(params.packageName))) {
-      return new Response(JSON.stringify(metadata))
+
+    for (const [name, { metadata }] of metadataMap.entries()) {
+      if (href.includes(encodePackageName(name))) {
+        return new Response(JSON.stringify(metadata))
+      }
     }
+
     return new Response('Not Found', { status: 404 })
   }) as typeof fetch
 }
@@ -140,4 +240,11 @@ function concatChunks(chunks: Uint8Array[]): Uint8Array {
     offset += chunk.byteLength
   }
   return out
+}
+
+function encodePackageName(name: string): string {
+  if (name.startsWith('@')) {
+    return name.replace('/', '%2f')
+  }
+  return name
 }

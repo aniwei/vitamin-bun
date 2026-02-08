@@ -95,34 +95,47 @@ See [docs/NETWORK_IO_TESTS.md](docs/NETWORK_IO_TESTS.md) for the coverage map an
 | Command | Status | Notes |
 | --- | --- | --- |
 | bun run | partial | Script execution via RuntimeCore; limited flags. |
-| bun install | partial | Registry/tarball support; lockfile basic. |
-| bun build | missing | Planned; no bundler in browser runtime. |
-| bun test | missing | Planned; no test runner yet. |
-| bun update | missing | Planned. |
-| bun create | missing | Planned. |
-| bun pm | missing | Planned; no package manager subcommands. |
-| bunx | missing | Planned; not wired in RuntimeCore. |
+| bun install | partial | Core: semver + integrity + lockfile + node_modules; workspaces/local links; peer/optional deps best-effort; lifecycle scripts disabled by default in browser. |
+| bun build | partial | Routed with browser-safe error; bundler not implemented. |
+| bun test | partial | Routed with browser-safe error; test runner not implemented. |
+| bun update | partial | Routed with browser-safe error; updater not implemented. |
+| bun create | partial | Routed with browser-safe error; scaffolding not implemented. |
+| bun pm | partial | Routed with browser-safe error; package manager subcommands not implemented. |
+| bunx | implemented | Resolves workspace bins, `.bin`, and package.json bin; supports `--package` and `--cwd`; auto-installs missing packages when possible; disable via `--no-install` or `BUNX_AUTO_INSTALL=false`. |
+
+### Bun install parity milestones
+
+- Core: registry metadata caching, semver resolution, tarball integrity checks, `node_modules` layout, lockfile updates.
+- Workspaces: local links via workspace protocol and simple workspace globs.
+- Scripts: lifecycle scripts are gated and disabled by default in browser runtimes.
+
+### Browser vs Node constraints (bun install)
+
+- Browser runtimes avoid executing arbitrary lifecycle scripts unless explicitly enabled.
+- Install uses VFS-backed filesystem; no native symlinks or OS-level hooks.
+- Integrity checks rely on WebCrypto availability.
 
 ## Built-in Modules (bun:*)
 
 | Module | Status | Notes |
 | --- | --- | --- |
-| bun:sqlite | missing | Planned; may require plugin hook. |
-| bun:ffi | missing | Not supported in browser. |
+| bun:sqlite | partial | WASM-backed via sql.js; in-memory only unless persistence is wired; requires wasm URL or binary. |
+| bun:ffi | partial | Emits clear error in browser runtime; host/plugin support not wired. |
 | bun:jsc | missing | Not applicable. |
-| bun:transpiler | missing | Planned. |
-| bun:glob | missing | Planned; VFS-backed implementation. |
-| bun:semver | missing | Planned; likely JS implementation. |
+| bun:transpiler | partial | Minimal `transpile()` surface backed by runtime transpiler. |
+| bun:glob | implemented | Full glob syntax/options via minimatch; VFS-backed. |
+| bun:semver | implemented | Full semver API surface via semver library. |
 
 ## Phase 2+ Compatibility Notes
 
 - CLI commands are only available through RuntimeCore `exec`; only `bun run` and `bun install` are wired today.
+- `bun install` scripts are gated (disabled by default) in browser runtimes; require explicit opt-in and a script runner.
 - bun:* modules are placeholders; none are bundled in the browser runtime yet.
 
 ## Phase 2+ Test Coverage
 
-- CLI command tests: missing.
-- bun:* module tests: missing.
+- CLI command tests: partial (bunx coverage).
+- bun:* module tests: partial (glob/semver/transpiler coverage).
 
 ## Node Compatibility (core modules)
 

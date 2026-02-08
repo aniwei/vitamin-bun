@@ -61,7 +61,11 @@ export class ModuleLoader {
     }
     const normalizedCore = this.normalizeCoreModuleId(entry)
     if (this.isCoreModule(normalizedCore)) {
-      return { id: normalizedCore, exports: this.coreModules[normalizedCore] as Record<string, unknown> }
+      const exports = this.coreModules[normalizedCore] as Record<string, unknown>
+      if (isUnavailableModule(exports)) {
+        throw new Error(exports.__unavailable)
+      }
+      return { id: normalizedCore, exports }
     }
     const resolved = this.resolve(entry, parent)
     if (this.cache.has(resolved)) return this.cache.get(resolved)!
@@ -153,7 +157,11 @@ export class ModuleLoader {
     }
     const normalizedCore = this.normalizeCoreModuleId(entry)
     if (this.isCoreModule(normalizedCore)) {
-      return { id: normalizedCore, exports: this.coreModules[normalizedCore] as Record<string, unknown> }
+      const exports = this.coreModules[normalizedCore] as Record<string, unknown>
+      if (isUnavailableModule(exports)) {
+        throw new Error(exports.__unavailable)
+      }
+      return { id: normalizedCore, exports }
     }
     const resolved = this.resolve(entry, parent)
     if (this.cache.has(resolved)) return this.cache.get(resolved)!
@@ -507,6 +515,12 @@ export class ModuleLoader {
 
 function isPromise(value: unknown): value is Promise<unknown> {
   return Boolean(value) && typeof (value as Promise<unknown>).then === 'function'
+}
+
+function isUnavailableModule(
+  exports: Record<string, unknown> | undefined,
+): exports is { __unavailable: string } {
+  return Boolean(exports) && typeof exports.__unavailable === 'string'
 }
 
 function isBareSpecifier(id: string): boolean {

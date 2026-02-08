@@ -16,9 +16,15 @@
   "dependencies": {
     "@vitamin-ai/virtual-fs": "workspace:*",
     "fflate": "^0.8.2",
+    "minimatch": "^10.0.1",
+    "sql.js": "^1.10.3",
+    "semver": "^7.6.3",
     "typescript": "^5.7.0"
   },
   "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/sql.js": "^1.4.6",
+    "@types/semver": "^7.5.8",
     "vitest": "^3.0.0"
   }
 }

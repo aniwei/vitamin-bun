@@ -5,6 +5,11 @@ import { createAssertModule } from './assert'
 import { createAssertStrictModule } from './assert-strict'
 import { createAsyncHooksModule } from './async-hooks'
 import { createBufferModule } from './buffer'
+import { createBunFfiModule } from './bun-ffi'
+import { createBunGlobModule } from './bun-glob'
+import { createBunSemverModule } from './bun-semver'
+import { createBunSqliteModule } from './bun-sqlite'
+import { createBunTranspilerModule } from './bun-transpiler'
 import { createConstantsModule } from './constants'
 import { createCryptoModule } from './crypto'
 import { createDiagnosticsChannelModule } from './diagnostics-channel'
@@ -52,6 +57,11 @@ export function createCoreModules(
   const os = createOsModule()
   const path = createPathModule()
   const buffer = createBufferModule()
+  const bunGlob = createBunGlobModule(vfs)
+  const bunSemver = createBunSemverModule()
+  const bunTranspiler = createBunTranspilerModule()
+  const bunSqlite = createBunSqliteModule(runtime)
+  const bunFfi = createBunFfiModule()
   const url = createUrlModule()
   const querystring = createQuerystringModule()
   const stringDecoder = createStringDecoderModule()
@@ -89,6 +99,11 @@ export function createCoreModules(
     'path/posix': path,
     'path/win32': path,
     buffer,
+    'bun:glob': bunGlob,
+    'bun:semver': bunSemver,
+    'bun:transpiler': bunTranspiler,
+    'bun:sqlite': bunSqlite,
+    'bun:ffi': bunFfi,
     url,
     querystring,
     string_decoder: stringDecoder,

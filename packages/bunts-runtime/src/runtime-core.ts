@@ -3,6 +3,7 @@ import { createCoreModules } from './core-modules/index'
 import { bunInstall } from './bun-install'
 import { Transpiler } from './transpiler'
 import { ModuleLoader } from './module-loader'
+import { createBunxRunner } from './bunx'
 import type { VirtualFileSystem } from '@vitamin-ai/virtual-fs'
 import type { ModuleRecord } from './module-loader'
 import type { RuntimePlugin } from './runtime-plugins'
@@ -25,6 +26,7 @@ export class RuntimeCore {
   private options: RuntimeCoreOptions
   private loader: ModuleLoader
   private nextSpawnPid = 1
+  private bunxRunner: ReturnType<typeof createBunxRunner>
 
   constructor(options: RuntimeCoreOptions) {
     this.options = options
@@ -61,23 +63,58 @@ export class RuntimeCore {
       },
       coreModules,
     })
+    this.bunxRunner = createBunxRunner({
+      vfs: options.vfs,
+      runtime: evaluator.runtime,
+      install: bunInstall,
+      registryUrl:
+        options.env?.BUN_INSTALL_REGISTRY ??
+        options.env?.NPM_CONFIG_REGISTRY,
+    })
   }
 
   async exec(command: string, args: string[]): Promise<number> {
     try {
-      if (command === 'bun' && args[0] === 'install') {
-        this.evaluator.runtime.process.argv = ['bun', 'install', ...args.slice(1)]
-        const registryUrl =
-          this.options.env?.BUN_INSTALL_REGISTRY ??
-          this.options.env?.NPM_CONFIG_REGISTRY
-        await bunInstall({
-          vfs: this.options.vfs,
-          cwd: this.evaluator.runtime.process.cwd(),
-          registryUrl,
-          stdout: (message) => this.evaluator.runtime.process.stdout.write(message),
-          stderr: (message) => this.evaluator.runtime.process.stderr.write(message),
-        })
-        return 0
+      if (command === 'bun') {
+        const subcommand = args[0] ?? 'run'
+        if (subcommand === 'install') {
+          this.evaluator.runtime.process.argv = ['bun', 'install', ...args.slice(1)]
+          const registryUrl =
+            this.options.env?.BUN_INSTALL_REGISTRY ??
+            this.options.env?.NPM_CONFIG_REGISTRY
+          await bunInstall({
+            vfs: this.options.vfs,
+            cwd: this.evaluator.runtime.process.cwd(),
+            registryUrl,
+            stdout: (message) => this.evaluator.runtime.process.stdout.write(message),
+            stderr: (message) => this.evaluator.runtime.process.stderr.write(message),
+          })
+          return 0
+        }
+
+        if (subcommand === 'build') {
+          return this.reportUnsupportedCli('bun build')
+        }
+
+        if (subcommand === 'test') {
+          return this.reportUnsupportedCli('bun test')
+        }
+
+        if (subcommand === 'update') {
+          return this.reportUnsupportedCli('bun update')
+        }
+
+        if (subcommand === 'create') {
+          return this.reportUnsupportedCli('bun create')
+        }
+
+        if (subcommand === 'pm') {
+          return this.reportUnsupportedCli('bun pm')
+        }
+
+        if (subcommand === 'x' || subcommand === 'bunx') {
+          return await this.execBunx(args.slice(1))
+        }
       }
       const entry = this.resolveEntry(command, args)
       this.evaluator.runtime.process.argv = ['bun', 'run', entry]
@@ -227,6 +264,22 @@ export class RuntimeCore {
       return args[0] ?? '/index.ts'
     }
     return command
+  }
+
+  private reportUnsupportedCli(command: string): number {
+    const message = `${command} is not available in the browser runtime yet.\n`
+    this.evaluator.runtime.process.stderr.write(message)
+    return 1
+  }
+
+  private async execBunx(args: string[]): Promise<number> {
+    const result = await this.bunxRunner.exec(args)
+    if (!result.entry || result.exitCode !== 0 || !result.name) {
+      return result.exitCode
+    }
+    this.evaluator.runtime.process.argv = ['bun', 'x', result.name, ...(result.rest ?? [])]
+    await this.evaluator.run(result.entry)
+    return 0
   }
 }
 
