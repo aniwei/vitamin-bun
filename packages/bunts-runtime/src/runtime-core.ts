@@ -100,64 +100,124 @@ export class RuntimeCore {
 
   private async runBunCommand(args: string[]): Promise<number> {
     const subcommand = args[0] ?? 'run'
-    if (subcommand === 'install') {
-      this.evaluator.runtime.process.argv = ['bun', 'install', ...args.slice(1)]
-      const registryUrl =
-        this.options.env?.BUN_INSTALL_REGISTRY ??
-        this.options.env?.NPM_CONFIG_REGISTRY
-      const progressPrefix = '__BUN_INSTALL_PROGRESS__ '
-      const emitProgress = (payload: Record<string, unknown>) => {
-        this.evaluator.runtime.process.stdout.write(
-          `${progressPrefix}${JSON.stringify(payload)}\n`,
-        )
+    switch (subcommand) {
+      case 'run':
+        return await this.runBunScript(args.slice(1))
+      case 'install': {
+        this.evaluator.runtime.process.argv = ['bun', 'install', ...args.slice(1)]
+        const registryUrl =
+          this.options.env?.BUN_INSTALL_REGISTRY ??
+          this.options.env?.NPM_CONFIG_REGISTRY
+        const progressPrefix = '__BUN_INSTALL_PROGRESS__ '
+        const emitProgress = (payload: Record<string, unknown>) => {
+          this.evaluator.runtime.process.stdout.write(
+            `${progressPrefix}${JSON.stringify(payload)}\n`,
+          )
+        }
+
+        await bunInstall({
+          vfs: this.options.vfs,
+          cwd: this.evaluator.runtime.process.cwd(),
+          registryUrl,
+          stdout: (message) => this.evaluator.runtime.process.stdout.write(message),
+          stderr: (message) => this.evaluator.runtime.process.stderr.write(message),
+          onProgress: (info) => emitProgress({ type: 'progress', ...info }),
+          onPackageCount: (info) => emitProgress({ type: 'count', ...info }),
+          onDownloadProgress: (info) => emitProgress({ type: 'download', ...info }),
+        })
+
+        return 0
       }
+      case 'build':
+        return this.reportUnsupportedCli('bun build')
+      case 'test':
+        return this.reportUnsupportedCli('bun test')
+      case 'update':
+        return this.reportUnsupportedCli('bun update')
+      case 'create':
+        return this.reportUnsupportedCli('bun create')
+      case 'pm':
+        return this.reportUnsupportedCli('bun pm')
+      case 'x':
+      case 'bunx':
+        return await this.execBunx(args.slice(1))
+      default:
+        return await this.runEntryCommand('bun', args)
+    }
+  }
 
-      await bunInstall({
-        vfs: this.options.vfs,
-        cwd: this.evaluator.runtime.process.cwd(),
-        registryUrl,
-        stdout: (message) => this.evaluator.runtime.process.stdout.write(message),
-        stderr: (message) => this.evaluator.runtime.process.stderr.write(message),
-        onProgress: (info) => emitProgress({ type: 'progress', ...info }),
-        onPackageCount: (info) => emitProgress({ type: 'count', ...info }),
-        onDownloadProgress: (info) => emitProgress({ type: 'download', ...info }),
-      })
+  private async runBunScript(args: string[]): Promise<number> {
+    const scriptName = args[0]
+    
+    if (!scriptName) {
+      return await this.runEntryCommand('bun', ['run', '/index.ts'])
+    }
 
+    const extraArgs = args.slice(1)
+
+    const cwd = this.evaluator.runtime.process.cwd()
+    const pkgPath = this.findPackageJsonPath(cwd)
+    if (pkgPath) {
+      try {
+        const pkg = JSON.parse(this.options.vfs.readFile(pkgPath)) as {
+          scripts?: Record<string, string>
+        }
+
+        const script = pkg.scripts?.[scriptName]
+        if (script) {
+          return await this.runScriptCommand(script, extraArgs)
+        }
+
+      } catch {
+        // fall through to entry resolution
+      }
+    }
+
+    return await this.runEntryCommand('bun', ['run', ...args])
+  }
+
+  private async runScriptCommand(script: string, extraArgs: string[] = []): Promise<number> {
+    const tokens = tokenizeArgString(script)
+    const combined = [...tokens, ...extraArgs]
+    if (combined.length === 0) {
       return 0
     }
 
-    if (subcommand === 'build') {
-      return this.reportUnsupportedCli('bun build')
-    }
+    const command = combined[0]
+    const rest = combined.slice(1)
+    const localBin = this.resolveLocalBin(command)
 
-    if (subcommand === 'test') {
-      return this.reportUnsupportedCli('bun test')
+    switch (true) {
+      case command === 'bun':
+        return await this.runBunCommand(rest)
+      case command === 'bunx':
+        return await this.execBunx(rest)
+      case Boolean(localBin):
+        return await this.runEntryCommand(localBin!, rest)
+      case command.startsWith('.') ||
+        command.startsWith('/') ||
+        command.endsWith('.js') ||
+        command.endsWith('.ts'):
+        return await this.runEntryCommand(command, rest)
+      default:
+        return await this.execBunx([command, ...rest])
     }
-
-    if (subcommand === 'update') {
-      return this.reportUnsupportedCli('bun update')
-    }
-
-    if (subcommand === 'create') {
-      return this.reportUnsupportedCli('bun create')
-    }
-
-    if (subcommand === 'pm') {
-      return this.reportUnsupportedCli('bun pm')
-    }
-
-    if (subcommand === 'x' || subcommand === 'bunx') {
-      return await this.execBunx(args.slice(1))
-    }
-
-    return await this.runEntryCommand('bun', args)
   }
 
   private async runEntryCommand(command: string, args: string[]): Promise<number> {
     const entry = this.resolveEntry(command, args)
-    this.evaluator.runtime.process.argv = ['bun', 'run', entry]
+    const extraArgs = this.extractExtraArgs(command, args)
+    this.evaluator.runtime.process.argv = ['bun', 'run', entry, ...extraArgs]
     await this.evaluator.run(entry)
     return 0
+  }
+
+  private extractExtraArgs(command: string, args: string[]): string[] {
+    if (command === 'bun') {
+      if (args[0] === 'run') return args.slice(2)
+      return args.slice(1)
+    }
+    return args.slice(1)
   }
 
   private parseCommand(
@@ -219,11 +279,13 @@ export class RuntimeCore {
     const originalEnv = runtime.process.env
 
     runtime.process.env = { ...originalEnv, ...(options.env ?? {}) }
+    
     runtime.process.stdout.write = (data: string | Uint8Array) => {
       const bytes = typeof data === 'string' ? new TextEncoder().encode(data) : data
       stdoutChunks.push(bytes)
       originalStdout(data)
     }
+
     runtime.process.stderr.write = (data: string | Uint8Array) => {
       const bytes = typeof data === 'string' ? new TextEncoder().encode(data) : data
       stderrChunks.push(bytes)
@@ -320,17 +382,55 @@ export class RuntimeCore {
   private reportUnsupportedCli(command: string): number {
     const message = `${command} is not available in the browser runtime yet.\n`
     this.evaluator.runtime.process.stderr.write(message)
+
     return 1
   }
 
   private async execBunx(args: string[]): Promise<number> {
     const result = await this.bunxRunner.exec(args)
+
     if (!result.entry || result.exitCode !== 0 || !result.name) {
       return result.exitCode
     }
+
     this.evaluator.runtime.process.argv = ['bun', 'x', result.name, ...(result.rest ?? [])]
     await this.evaluator.run(result.entry)
     return 0
+  }
+
+  private findPackageJsonPath(start: string): string | null {
+    let current = start.startsWith('/') ? start : `/${start}`
+
+    while (true) {
+      const normalized = current.endsWith('/') ? current.slice(0, -1) : current
+      const candidate = `${normalized || ''}/package.json`
+
+      if (this.options.vfs.exists(candidate)) return candidate
+      if (normalized === '' || normalized === '/') return null
+      
+      const parts = normalized.split('/').filter(Boolean)
+      parts.pop()
+      current = parts.length === 0 ? '/' : `/${parts.join('/')}`
+    }
+  }
+
+  private resolveLocalBin(command: string): string | null {
+    if (!command || command.includes('/')) return null
+
+    const cwd = this.evaluator.runtime.process.cwd()
+    let current = cwd.startsWith('/') ? cwd : `/${cwd}`
+
+    while (true) {
+      const normalized = current.endsWith('/') ? current.slice(0, -1) : current
+      const binPath = `${normalized || ''}/node_modules/.bin/${command}`
+
+      if (this.options.vfs.exists(binPath)) return binPath
+      if (normalized === '' || normalized === '/') return null
+      
+      const parts = normalized.split('/').filter(Boolean)
+      parts.pop()
+      current = parts.length === 0 ? '/' : `/${parts.join('/')}`
+    }
   }
 }
 

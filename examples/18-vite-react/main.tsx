@@ -214,19 +214,14 @@ export default defineConfig({
       })
 
       await new Promise((resolve) => setTimeout(resolve, 1500))
-      proc.kill()
-      const code = await proc.exited
 
       text += `\n--- dev stdout ---\n${devStdout}\n`
       if (devStderr) {
         text += `--- dev stderr ---\n${devStderr}\n`
       }
-      text += `\nDev exit code: ${code}\n`
-      text += '\n(Dev server is terminated automatically in this demo.)'
+      text += '\n(Dev server keeps running in this demo.)'
 
       setOutput(text)
-
-      await container.destroy()
       setBusy(false)
   }
 

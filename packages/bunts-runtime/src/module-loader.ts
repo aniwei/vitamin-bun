@@ -82,7 +82,8 @@ export class ModuleLoader {
     }
 
     const source = this.vfs.readFile(resolved)
-    const { code } = this.transpiler.compile(source, loader, resolved)
+    const compiled = this.transpiler.compile(source, loader, resolved)
+    const code = applySourceMap(compiled.code, compiled.map)
 
     const module: ModuleRecord = { id: resolved, exports: {} }
     this.cache.set(resolved, module)
@@ -134,28 +135,34 @@ export class ModuleLoader {
       console.warn('onModuleResolve returned a Promise in loadSync; ignoring async result')
       resolveResult = undefined
     }
+
     if (resolveResult?.id) {
       entry = resolveResult.id
       if (resolveResult.stop) {
         return { id: resolveResult.id, exports: {} }
       }
     }
+
     let hookResult = this.hooks?.onModuleLoad?.(entry, parent)
     if (isPromise(hookResult)) {
       console.warn('onModuleLoad returned a Promise in loadSync; ignoring async result')
       hookResult = undefined
     }
+
     if (hookResult?.exports) {
       const id = hookResult.id ?? entry
       return { id, exports: hookResult.exports }
     }
+
     if (hookResult?.id) {
       entry = hookResult.id
       if (hookResult.stop) {
         return { id: entry, exports: {} }
       }
     }
+
     const normalizedCore = this.normalizeCoreModuleId(entry)
+    
     if (this.isCoreModule(normalizedCore)) {
       const exports = this.coreModules[normalizedCore] as Record<string, unknown>
       if (isUnavailableModule(exports)) {
@@ -163,6 +170,7 @@ export class ModuleLoader {
       }
       return { id: normalizedCore, exports }
     }
+    
     const resolved = this.resolve(entry, parent)
     if (this.cache.has(resolved)) return this.cache.get(resolved)!
 
@@ -178,7 +186,8 @@ export class ModuleLoader {
     }
 
     const source = this.vfs.readFile(resolved)
-    const { code } = this.transpiler.compile(source, loader, resolved)
+    const compiled = this.transpiler.compile(source, loader, resolved)
+    const code = applySourceMap(compiled.code, compiled.map)
 
     const module: ModuleRecord = { id: resolved, exports: {} }
     this.cache.set(resolved, module)
@@ -517,10 +526,24 @@ function isPromise(value: unknown): value is Promise<unknown> {
   return Boolean(value) && typeof (value as Promise<unknown>).then === 'function'
 }
 
+function applySourceMap(code: string, map?: string): string {
+  if (!map) return code
+  const base64 = encodeBase64(map)
+  return `${code}\n//# sourceMappingURL=data:application/json;base64,${base64}`
+}
+
+function encodeBase64(input: string): string {
+  if (typeof btoa === 'function') {
+    return btoa(unescape(encodeURIComponent(input)))
+  }
+  // Node.js fallback
+  return Buffer.from(input, 'utf8').toString('base64')
+}
+
 function isUnavailableModule(
   exports: Record<string, unknown> | undefined,
 ): exports is { __unavailable: string } {
-  return Boolean(exports) && typeof exports.__unavailable === 'string'
+  return typeof exports?.__unavailable === 'string'
 }
 
 function isBareSpecifier(id: string): boolean {

@@ -46,6 +46,7 @@ type PackageJson = {
   peerDependencies?: Record<string, string>
   workspaces?: string[] | { packages?: string[] }
   scripts?: Record<string, string>
+  bin?: string | Record<string, string>
 }
 
 type RegistryMetadata = {
@@ -347,6 +348,7 @@ function bumpTilde(version: { major: number; minor: number; patch: number }): st
 }
 
 function extractTarToVfs(vfs: VirtualFileSystem, tar: Uint8Array, targetRoot: string): void {
+  vfs.mkdirp(targetRoot)
   let offset = 0
   const textDecoder = new TextDecoder()
 
@@ -591,6 +593,14 @@ async function installDependency(params: {
     vfs.mkdirp(installPath)
     copyDirectory(vfs, workspace.path, installPath)
     const workspacePkg = readPackageJson(vfs, joinPath(installPath, 'package.json'))
+    createBinLinks({
+      vfs,
+      cwd,
+      packagePath: installPath,
+      packageName: workspacePkg.name ?? request.name,
+      pkg: workspacePkg,
+      stderr,
+    })
     enqueueDependencies(workspacePkg, request.name, params.pushRequest)
     checkPeerDependencies(workspacePkg, installed, stderr)
     await runLifecycleScripts({
@@ -662,6 +672,14 @@ async function installDependency(params: {
     version,
     stderr,
   )
+  createBinLinks({
+    vfs,
+    cwd,
+    packagePath: installPath,
+    packageName: installedPkg.name ?? request.name,
+    pkg: installedPkg,
+    stderr,
+  })
   enqueueDependencies(installedPkg, request.name, params.pushRequest)
   checkPeerDependencies(installedPkg, installed, stderr)
   await runLifecycleScripts({
@@ -744,6 +762,47 @@ function resolveNodeModulesPath(cwd: string, name: string): string {
     return joinPath(cwd, 'node_modules', scope, pkg ?? '')
   }
   return joinPath(cwd, 'node_modules', name)
+}
+
+function createBinLinks(params: {
+  vfs: VirtualFileSystem
+  cwd: string
+  packagePath: string
+  packageName: string
+  pkg: PackageJson
+  stderr?: (message: string) => void
+}): void {
+  const { vfs, cwd, packagePath, packageName, pkg, stderr } = params
+  const binField = pkg.bin
+  if (!binField) return
+
+  const binDir = joinPath(cwd, 'node_modules', '.bin')
+  vfs.mkdirp(binDir)
+
+  const entries: Record<string, string> = {}
+  if (typeof binField === 'string') {
+    const name = packageName.includes('/')
+      ? packageName.split('/')[1] ?? packageName
+      : packageName
+    entries[name] = binField
+  } else if (typeof binField === 'object') {
+    for (const [name, target] of Object.entries(binField)) {
+      if (typeof target === 'string') {
+        entries[name] = target
+      }
+    }
+  }
+
+  for (const [name, target] of Object.entries(entries)) {
+    const targetPath = joinPath(packagePath, target)
+    if (!vfs.exists(targetPath)) {
+      stderr?.(`Warning: bin target not found for ${packageName}: ${target}\n`)
+      continue
+    }
+    const binPath = joinPath(binDir, name)
+    const shim = `import '${targetPath}'\n`
+    vfs.writeFile(binPath, shim)
+  }
 }
 
 function copyDirectory(vfs: VirtualFileSystem, source: string, target: string): void {
