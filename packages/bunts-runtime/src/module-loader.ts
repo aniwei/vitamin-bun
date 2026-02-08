@@ -31,6 +31,7 @@ export class ModuleLoader {
   private runtime: RuntimeGlobals
   private coreModules: Record<string, unknown>
   private hooks?: ModuleLoaderOptions['hooks']
+  private loggedDependencies = new Set<string>()
 
   constructor(options: ModuleLoaderOptions) {
     this.vfs = options.vfs
@@ -82,8 +83,7 @@ export class ModuleLoader {
     }
 
     const source = this.vfs.readFile(resolved)
-    const compiled = this.transpiler.compile(source, loader, resolved)
-    const code = applySourceMap(compiled.code, compiled.map)
+    const { code } = this.transpiler.compile(source, loader, resolved)
 
     const module: ModuleRecord = { id: resolved, exports: {} }
     this.cache.set(resolved, module)
@@ -186,8 +186,7 @@ export class ModuleLoader {
     }
 
     const source = this.vfs.readFile(resolved)
-    const compiled = this.transpiler.compile(source, loader, resolved)
-    const code = applySourceMap(compiled.code, compiled.map)
+    const { code } = this.transpiler.compile(source, loader, resolved)
 
     const module: ModuleRecord = { id: resolved, exports: {} }
     this.cache.set(resolved, module)
@@ -457,6 +456,7 @@ export class ModuleLoader {
   private preloadDependencies(source: string, currentPath: string): void {
     const deps = this.scanDependencies(source)
     for (const dep of deps) {
+      this.logDependency(currentPath, dep)
       const normalized = this.normalizeCoreModuleId(dep)
       if (this.isCoreModule(normalized)) continue
       try {
@@ -465,6 +465,13 @@ export class ModuleLoader {
         // ignore resolution errors during preload
       }
     }
+  }
+
+  private logDependency(currentPath: string, dep: string): void {
+    const key = `${currentPath}::${dep}`
+    if (this.loggedDependencies.has(key)) return
+    this.loggedDependencies.add(key)
+    this.runtime.console.log(`import: ${currentPath} -> ${dep}`)
   }
 
   private scanDependencies(source: string): string[] {
@@ -534,19 +541,6 @@ function isPromise(value: unknown): value is Promise<unknown> {
   return Boolean(value) && typeof (value as Promise<unknown>).then === 'function'
 }
 
-function applySourceMap(code: string, map?: string): string {
-  if (!map) return code
-  const base64 = encodeBase64(map)
-  return `${code}\n//# sourceMappingURL=data:application/json;base64,${base64}`
-}
-
-function encodeBase64(input: string): string {
-  if (typeof btoa === 'function') {
-    return btoa(unescape(encodeURIComponent(input)))
-  }
-  // Node.js fallback
-  return Buffer.from(input, 'utf8').toString('base64')
-}
 
 function isUnavailableModule(
   exports: Record<string, unknown> | undefined,
