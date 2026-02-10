@@ -1,4 +1,4 @@
-export { createBunContainer, Readable } from './container'
+export { createVitaminContainer, Readable } from './container'
 export type {
   ContainerOptions,
   ExecResult,

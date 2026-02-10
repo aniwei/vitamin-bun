@@ -1,5 +1,5 @@
 import React from 'react'
-import { createBunContainer } from '@vitamin-ai/sdk'
+import { createVitaminContainer } from '@vitamin-ai/sdk'
 import { ExampleRunner } from '../components/ExampleRunner'
 
 export function Example07BunServeBasic() {
@@ -10,7 +10,7 @@ export function Example07BunServeBasic() {
       description="Start a Bun.serve server and fetch through the proxy."
       run={async ({ log }) => {
         log('⏳ Booting container...')
-        const container = await createBunContainer({
+        const container = await createVitaminContainer({
           serviceWorkerUrl: new URL('../../service-worker.ts', import.meta.url).toString(),
           files: {
             '/server.ts': `

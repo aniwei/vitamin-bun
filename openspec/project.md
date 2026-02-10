@@ -27,7 +27,7 @@ Vitamin-Bun 将 Bun JavaScript 运行时编译为 WebAssembly，并在浏览器�
 	- `@vitamin-ai/virtual-fs`：内存 VFS 与可插拔后端（Memory/IndexedDB/OPFS）
 	- `@vitamin-ai/network-proxy`：HTTP/WS 代理与 Service Worker
 	- `@vitamin-ai/browser-runtime`：Worker 生命周期、SAB 桥接
-	- `@vitamin-ai/sdk`：对外 API（`createBunContainer()` 等）
+	- `@vitamin-ai/sdk`：对外 API（`createVitaminContainer()` 等）
 - 主线程/Worker 分离：WASM 运行在专用 Worker 中。
 - 同步 WASI 调用通过 SharedArrayBuffer + Atomics 桥接异步浏览器 API。
 - 网络与文件系统能力通过宿主提供，并以 WASI 接口对 WASM 暴露。

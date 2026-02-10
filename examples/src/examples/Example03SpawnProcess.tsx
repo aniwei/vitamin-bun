@@ -1,5 +1,5 @@
 import React from 'react'
-import { createBunContainer } from '@vitamin-ai/sdk'
+import { createVitaminContainer } from '@vitamin-ai/sdk'
 import { ExampleRunner } from '../components/ExampleRunner'
 
 export function Example03SpawnProcess() {
@@ -9,7 +9,7 @@ export function Example03SpawnProcess() {
       title="Spawn Process"
       description="Spawn a long-running process and stream output."
       run={async ({ log, appendOutput }) => {
-        const container = await createBunContainer({
+        const container = await createVitaminContainer({
           files: {
             '/repl.ts': `
               const decoder = new TextDecoder()

@@ -1,5 +1,5 @@
 import React from 'react'
-import { createBunContainer } from '@vitamin-ai/sdk'
+import { createVitaminContainer } from '@vitamin-ai/sdk'
 import { ExampleRunner } from '../components/ExampleRunner'
 
 export function Example15HttpNetTls() {
@@ -10,7 +10,7 @@ export function Example15HttpNetTls() {
       description="Use http, net, and tls inside the container."
       run={async ({ log, setOutput }) => {
         setOutput('Booting container...\n')
-        const container = await createBunContainer({
+        const container = await createVitaminContainer({
           serviceWorkerUrl: new URL('../../service-worker.ts', import.meta.url).toString(),
           allowedHosts: ['httpbin.org', 'example.com'],
           files: {

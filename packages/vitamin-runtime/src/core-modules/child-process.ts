@@ -1,3 +1,4 @@
+import { SimpleEmitter } from '../shared/simple-emitter'
 import { createStreamModule } from './stream'
 
 type ExecCallback = (error: Error | null, stdout: string, stderr: string) => void
@@ -11,28 +12,6 @@ type SpawnSyncResult = {
   signal: string | null
   error?: Error
 }
-
-class SimpleEmitter {
-  private listeners = new Map<string, Set<(...args: unknown[]) => void>>()
-
-  on(event: string, listener: (...args: unknown[]) => void): this {
-    if (!this.listeners.has(event)) {
-      this.listeners.set(event, new Set())
-    }
-    this.listeners.get(event)!.add(listener)
-    return this
-  }
-
-  emit(event: string, ...args: unknown[]): boolean {
-    const set = this.listeners.get(event)
-    if (!set || set.size === 0) return false
-    for (const listener of Array.from(set)) {
-      listener(...args)
-    }
-    return true
-  }
-}
-
 class FakeChildProcess extends SimpleEmitter {
   pid = 0
   killed = false

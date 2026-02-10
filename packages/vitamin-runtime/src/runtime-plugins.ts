@@ -1,5 +1,5 @@
 import type { VirtualFileSystem } from '@vitamin-ai/virtual-fs'
-import type { BunRuntime } from './vitamin-runtime'
+import type { VitaminRuntime } from './vitamin-runtime'
 
 export type MaybePromise<T> = T | Promise<T>
 
@@ -21,7 +21,7 @@ export type PluginLogger = {
 
 export type PluginContext = {
   vfs: VirtualFileSystem
-  runtime: BunRuntime
+  runtime: VitaminRuntime
   env: Record<string, string>
   logger: PluginLogger
 }
@@ -48,7 +48,7 @@ const defaultLogger: PluginLogger = {
 
 export class PluginManager {
   private plugins: RuntimePlugin[] = []
-  private runtime: BunRuntime | null = null
+  private runtime: VitaminRuntime | null = null
   private vfs: VirtualFileSystem
   private env: Record<string, string>
   private logger: PluginLogger
@@ -62,7 +62,7 @@ export class PluginManager {
     this.trace = options.trace ?? false
   }
 
-  setRuntime(runtime: BunRuntime): void {
+  setRuntime(runtime: VitaminRuntime): void {
     this.runtime = runtime
   }
 

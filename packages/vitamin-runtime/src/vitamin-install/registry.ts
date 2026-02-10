@@ -24,7 +24,7 @@ async function fetchJson<T>(ctx: InstallContext, url: string): Promise<T> {
   const cached = await ctx.cache?.getJson(url)
   if (cached) return cached as T
 
-  const response = await ctx.fetchImpl(url)
+  const response = await ctx.fetch.apply(self, [url])
 
   if (!response.ok) {
     throw new Error(`Failed to fetch ${url}: ${response.status}`)

@@ -1,5 +1,5 @@
 import React from 'react'
-import { createBunContainer } from '@vitamin-ai/sdk'
+import { createVitaminContainer } from '@vitamin-ai/sdk'
 import { ExampleRunner } from '../components/ExampleRunner'
 
 export function Example16FileIo() {
@@ -10,7 +10,7 @@ export function Example16FileIo() {
       description="Write, read, and stream files with Bun.file."
       run={async ({ log, setOutput }) => {
         setOutput('Booting container...\n')
-        const container = await createBunContainer({
+        const container = await createVitaminContainer({
           files: {
             '/index.ts': `
               await Bun.write('/note.txt', 'hello')

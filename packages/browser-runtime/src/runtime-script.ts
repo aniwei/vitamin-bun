@@ -1,6 +1,5 @@
 import { RuntimeCore } from '@vitamin-ai/vitamin-runtime'
 import { VirtualFileSystem, InodeKind } from '@vitamin-ai/virtual-fs'
-import { installFetchWarnings } from './fetch-warnings'
 
 declare const self: DedicatedWorkerGlobalScope
 
@@ -161,14 +160,10 @@ async function handleInit(msg: InitMessage): Promise<void> {
       },
       onServeUnregister(port: number) {
         post({ type: 'serve:unregister', port })
-      },
+      }
     })
 
-    installFetchWarnings()
-
-    netProxy = createNetProxyBridge()
-    ;(globalThis as { __vitaminNetProxy?: NetProxyBridge }).__vitaminNetProxy = netProxy
-
+  
     post({ type: 'ready' })
   } catch (err) {
     postError(`Init failed: ${err instanceof Error ? err.message : String(err)}`)

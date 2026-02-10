@@ -5,7 +5,7 @@ export type InstallContext = {
   vfs: VirtualFileSystem
   cwd: string
   registryUrl: string
-  fetchImpl: typeof fetch
+  fetch: typeof fetch
   enableScripts: boolean
   cache?: InstallCache
   stdout?: (message: string) => void

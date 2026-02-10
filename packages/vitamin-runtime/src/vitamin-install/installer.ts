@@ -134,7 +134,7 @@ export async function installDependency(params: {
 
   while (attempt <= maxRetries) {
     try {
-      const tarball = await fetchArrayBufferCached(ctx.cache, ctx.fetchImpl, tarballUrl, (progress) => {
+      const tarball = await fetchArrayBufferCached(ctx.cache, ctx.fetch, tarballUrl, (progress) => {
         const percent = progress.total 
           ? Math.round((progress.received / progress.total) * 100) 
           : undefined

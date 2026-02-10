@@ -1,5 +1,5 @@
 import React from 'react'
-import { createBunContainer } from '@vitamin-ai/sdk'
+import { createVitaminContainer } from '@vitamin-ai/sdk'
 import { ExampleRunner } from '../components/ExampleRunner'
 
 export function Example02VirtualFs() {
@@ -10,7 +10,7 @@ export function Example02VirtualFs() {
       description="Write, read, mount, and list files inside the container VFS."
       run={async ({ log }) => {
         log('⏳ Booting container...')
-        const container = await createBunContainer({})
+        const container = await createVitaminContainer({})
         log('✅ Container ready\n')
 
         await container.fs.writeFile('/hello.txt', 'Hello, virtual world!')

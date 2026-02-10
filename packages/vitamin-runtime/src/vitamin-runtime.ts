@@ -30,7 +30,7 @@ export interface RuntimeHooks {
   onServeRegister?: (port: number) => void
   onServeUnregister?: (port: number) => void
   onModuleRequest?: (id: string, parent?: string) => { id?: string; exports?: Record<string, unknown> } | void
-  onModuleLoadError?: (error: Error, id: string, parent?: string) => void
+  onModuleError?: (error: Error, id: string, parent?: string) => void
   onSpawn?: (options: SpawnOptions) => SpawnResult
   onSpawnSync?: (options: SpawnOptions) => SpawnSyncResult
 }
@@ -141,25 +141,28 @@ export function createVitaminRuntime(
   }
 
   const vitaminEnv = { ...(env.env ?? {}) }
-  let currentCwd = env.cwd ?? '/'
   const processEmitter = new SimpleEmitter()
-  let processExitCode: number | undefined
   const startTime = Date.now()
+  let currentCwd = env.cwd ?? '/'
+  let processExitCode: number | undefined
 
   const nextTickQueue: Array<() => void> = []
   let nextTickScheduled = false
   const scheduleNextTick = () => {
     if (nextTickScheduled) return
+
     nextTickScheduled = true
     const enqueue = typeof queueMicrotask === 'function'
       ? queueMicrotask
       : (cb: () => void) => Promise.resolve().then(cb)
+    
     enqueue(() => {
       nextTickScheduled = false
       const tasks = nextTickQueue.splice(0)
       for (const task of tasks) {
         task()
       }
+
       if (nextTickQueue.length > 0) {
         scheduleNextTick()
       }
@@ -174,7 +177,7 @@ export function createVitaminRuntime(
     return {
       port,
       hostname: options.hostname,
-      stop: () => {
+      stop () {
         servers.delete(port)
         onServeUnregister?.(port)
       },
@@ -281,7 +284,7 @@ export function createVitaminRuntime(
         currentCwd = path
       },
       platform: 'browser',
-      arch: 'wasm',
+      arch: 'TypeScript',
       version: '0.0.0',
       versions: {
         vitamin: '0.0.0',
@@ -467,6 +470,7 @@ class FileSink {
   flush() {
     if (this.closed) return
     if (this.chunks.length === 0) return
+
     let payload = concatChunks(this.chunks)
     if (this.append) {
       const existing = this.vfs.exists(this.path)
@@ -474,6 +478,7 @@ class FileSink {
         : new Uint8Array(0)
       payload = concatChunks([existing, payload])
     }
+
     this.vfs.writeFile(this.path, payload)
     this.chunks = []
     this.bufferedBytes = 0
@@ -501,12 +506,15 @@ async function normalizeWriteChunk(
   if (typeof chunk === 'string') {
     return new TextEncoder().encode(chunk)
   }
+
   if (chunk instanceof Uint8Array) {
     return chunk
   }
+
   if (chunk instanceof ArrayBuffer) {
     return new Uint8Array(chunk)
   }
+
   return new Uint8Array(await chunk.arrayBuffer())
 }
 

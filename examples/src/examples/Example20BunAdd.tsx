@@ -1,5 +1,5 @@
 import React from 'react'
-import { createBunContainer } from '@vitamin-ai/sdk'
+import { createVitaminContainer } from '@vitamin-ai/sdk'
 import { ExampleRunner } from '../components/ExampleRunner'
 
 export function Example20BunAdd() {
@@ -12,11 +12,16 @@ export function Example20BunAdd() {
         setOutput('Booting container...\n')
         const registry = `${location.origin}/npm`
 
-        const container = await createBunContainer({
+        const container = await createVitaminContainer({
           env: {
             BUN_INSTALL_REGISTRY: registry,
           },
           files: {
+            '/index.ts': `
+              import isEven from 'is-even'
+              console.log('isEven(4)', isEven(4))
+              console.log('isEven(5)', isEven(5))
+            `,
             '/package.json': JSON.stringify(
               {
                 name: 'demo-bun-add',
@@ -29,7 +34,8 @@ export function Example20BunAdd() {
           },
         })
 
-        const result = await container.exec('bun', ['add', 'is-even'])
+        debugger
+        const result = await container.exec('vitamin', ['add', 'is-even'])
         log(result.stdout || '')
         log(result.stderr || '')
 
@@ -48,7 +54,9 @@ export function Example20BunAdd() {
           log(base64ToText(manifest))
         }
 
-        await container.dispose()
+        const result1 = await container.exec('vitamin', ['run', 'index.ts'])
+
+        // await container.dispose()
       }}
     />
   )

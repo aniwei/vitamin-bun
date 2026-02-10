@@ -1,5 +1,5 @@
 import React from 'react'
-import { createBunContainer } from '@vitamin-ai/sdk'
+import { createVitaminContainer } from '@vitamin-ai/sdk'
 import { ExampleRunner } from '../components/ExampleRunner'
 
 export function Example12BunInstall() {
@@ -12,7 +12,7 @@ export function Example12BunInstall() {
         setOutput('⏳ Booting container...\n')
         const registry = `${location.origin}/npm`
 
-        const container = await createBunContainer({
+        const container = await createVitaminContainer({
           env: {
             BUN_INSTALL_REGISTRY: registry,
           },

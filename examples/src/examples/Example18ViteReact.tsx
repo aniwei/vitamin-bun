@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { createBunContainer, type Container } from '@vitamin-ai/sdk'
+import { createVitaminContainer, type Container } from '@vitamin-ai/sdk'
 import { ExampleLayout } from '../components/ExampleLayout'
 
 const FILES = [
@@ -27,7 +27,7 @@ export function Example18ViteReact() {
   const ensureContainer = useCallback(async (): Promise<Container> => {
     if (containerRef.current) return containerRef.current
     setStatus('⏳ Booting container...')
-    const container = await createBunContainer({
+    const container = await createVitaminContainer({
       files: {
         '/index.html': `<!DOCTYPE html>
 <html lang="en">

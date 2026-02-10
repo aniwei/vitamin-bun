@@ -1,5 +1,5 @@
 import React from 'react'
-import { createBunContainer } from '@vitamin-ai/sdk'
+import { createVitaminContainer } from '@vitamin-ai/sdk'
 import { ExampleRunner } from '../components/ExampleRunner'
 
 export function Example01HelloWorld() {
@@ -10,7 +10,7 @@ export function Example01HelloWorld() {
       description="Run a simple TypeScript script inside a Bun container."
       run={async ({ setOutput, appendOutput }) => {
         setOutput('⏳ Booting container...\n')
-        const container = await createBunContainer({
+        const container = await createVitaminContainer({
           files: {
             '/index.ts': `
               const name: string = 'Vitamin Bun'

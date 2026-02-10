@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { createBunContainer, type Container } from '@vitamin-ai/sdk'
+import { createVitaminContainer, type Container } from '@vitamin-ai/sdk'
 import { ExampleLayout } from '../components/ExampleLayout'
 
 const DEFAULT_CODE = `// Try editing this code and clicking "Run"
@@ -37,7 +37,7 @@ export function Example04CodeEditor() {
     const init = async () => {
       setStatus('⏳ Loading runtime...')
       try {
-        containerRef.current = await createBunContainer({ env: { NO_COLOR: '1' } })
+        containerRef.current = await createVitaminContainer({ env: { NO_COLOR: '1' } })
         setStatus('✅ Ready')
       } catch (err) {
         setStatus('❌ Failed to load runtime')

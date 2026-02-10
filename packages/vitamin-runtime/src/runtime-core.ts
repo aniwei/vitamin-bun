@@ -5,7 +5,6 @@ import { parseAddArgs } from './vitamin-add/cli'
 import { runAddFlow } from './vitamin-add/add-flow'
 import { Transpiler } from './transpiler'
 import { ModuleLoader } from './vitamin-module'
-import { createVitaminxRunner } from './vitaminx'
 import type { VirtualFileSystem } from '@vitamin-ai/virtual-fs'
 import type { ModuleRecord } from './vitamin-module'
 import type { RuntimePlugin } from './runtime-plugins'
@@ -19,7 +18,7 @@ export interface RuntimeCoreOptions {
   onServeRegister?: (port: number) => void
   onServeUnregister?: (port: number) => void
   onModuleRequest?: (id: string, parent?: string) => { id?: string; exports?: Record<string, unknown> } | void
-  onModuleLoadError?: (error: Error, id: string, parent?: string) => void
+  onModuleError?: (error: Error, id: string, parent?: string) => void
   plugins?: RuntimePlugin[]
   pluginTrace?: boolean
 }
@@ -29,7 +28,6 @@ export class RuntimeCore {
   private options: RuntimeCoreOptions
   private loader: ModuleLoader
   private nextSpawnPid = 1
-  private x: ReturnType<typeof createVitaminxRunner>
 
   constructor(options: RuntimeCoreOptions) {
     this.options = options
@@ -48,7 +46,7 @@ export class RuntimeCore {
         onServeRegister: options.onServeRegister,
         onServeUnregister: options.onServeUnregister,
         onModuleRequest: options.onModuleRequest,
-        onModuleLoadError: options.onModuleLoadError,
+        onModuleError: options.onModuleError,
         onSpawn: (spawnOptions) => this.spawn(spawnOptions),
         onSpawnSync: (spawnOptions) => this.spawnSync(spawnOptions),
       },
@@ -66,14 +64,6 @@ export class RuntimeCore {
         console: evaluator.runtime.console,
       },
       coreModules,
-    })
-    this.x = createVitaminxRunner({
-      vfs: options.vfs,
-      runtime: evaluator.runtime,
-      install: install,
-      registryUrl:
-        options.env?.BUN_INSTALL_REGISTRY ??
-        options.env?.NPM_CONFIG_REGISTRY,
     })
   }
 
@@ -95,8 +85,6 @@ export class RuntimeCore {
     switch (command) {
       case 'vitamin':
         return await this.runVitaminCommand(args)
-      case 'vitaminx':
-        return await this.execVitaminx(args)
       default:
         return await this.runEntryCommand(command, args)
     }
@@ -109,6 +97,7 @@ export class RuntimeCore {
         return await this.runVitaminScript(args.slice(1))
       case 'add':
         return await this.runVitaminAdd(args.slice(1))
+      case 'i':
       case 'install': {
         this.evaluator.runtime.process.argv = ['vitamin', 'install', ...args.slice(1)]
         const registryUrl =
@@ -134,21 +123,10 @@ export class RuntimeCore {
 
         return 0
       }
-      case 'build':
-        return this.reportUnsupportedCli('bun build')
-      case 'test':
-        return this.reportUnsupportedCli('bun test')
-      case 'update':
-        return this.reportUnsupportedCli('bun update')
       case 'create':
-        return this.reportUnsupportedCli('bun create')
-      case 'pm':
-        return this.reportUnsupportedCli('bun pm')
-      case 'x':
-      case 'vitaminx':
-        return await this.execVitaminx(args.slice(1))
+        return this.reportUnsupportedCli('vitamin create')
       default:
-        return await this.runEntryCommand('bun', args)
+        return await this.runEntryCommand('vitamin', args)
     }
   }
 
@@ -215,6 +193,7 @@ export class RuntimeCore {
   private async runScriptCommand(script: string, extraArgs: string[] = []): Promise<number> {
     const tokens = tokenizeArgString(script)
     const combined = [...tokens, ...extraArgs]
+
     if (combined.length === 0) {
       return 0
     }
@@ -226,8 +205,6 @@ export class RuntimeCore {
     switch (true) {
       case command === 'vitamin':
         return await this.runVitaminCommand(rest)
-      case command === 'vitaminx':
-        return await this.execVitaminx(rest)
       case Boolean(localBin):
         return await this.runEntryCommand(localBin!, rest)
       case command.startsWith('.') ||
@@ -236,7 +213,7 @@ export class RuntimeCore {
         command.endsWith('.ts'):
         return await this.runEntryCommand(command, rest)
       default:
-        return await this.execVitaminx([command, ...rest])
+        throw new Error(`Cannot find script command: ${command}`)
     }
   }
 
@@ -393,9 +370,7 @@ export class RuntimeCore {
     }
   }
 
-  loadSync(entry: string, parent?: string): ModuleRecord {
-    return this.loader.loadSync(entry, parent)
-  }
+
 
   async dispatchServeRequest(request: Request): Promise<Response> {
     return await this.evaluator.runtime.Vitamin.__dispatchServeRequest(request)
@@ -420,18 +395,6 @@ export class RuntimeCore {
     this.evaluator.runtime.process.stderr.write(message)
 
     return 1
-  }
-
-  private async execVitaminx(args: string[]): Promise<number> {
-    const result = await this.x.exec(args)
-
-    if (!result.entry || result.exitCode !== 0 || !result.name) {
-      return result.exitCode
-    }
-
-    this.evaluator.runtime.process.argv = ['vitamin', 'x', result.name, ...(result.rest ?? [])]
-    await this.evaluator.run(result.entry)
-    return 0
   }
 
   private findPackageJsonPath(start: string): string | null {

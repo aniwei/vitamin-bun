@@ -3,6 +3,7 @@ import type { WorkerInMessage, WorkerOutMessage, RuntimeOptions } from './types'
 
 
 export class WasmWorker {
+  private name: string
   private worker: Worker | null = null
   private sabBridge: SABBridge | null = null
   private messageHandlers = new Map<string, Set<(data: WorkerOutMessage) => void>>()
@@ -19,7 +20,8 @@ export class WasmWorker {
 
   ready = false
 
-  constructor(private options: RuntimeOptions) {
+  constructor(name: string, private options: RuntimeOptions) {
+    this.name = name
     this.allowedHosts = options.allowedHosts ? new Set(options.allowedHosts) : null
   }
 
@@ -36,66 +38,80 @@ export class WasmWorker {
 
     const scriptUrl = this.options.workerUrl
       ? new URL(this.options.workerUrl)
-      : new URL('./worker-script.js', import.meta.url)
+      : new URL('./runtime-script.ts', import.meta.url)
 
-    this.worker = new Worker(scriptUrl, { type: 'module' })
+    this.worker = new Worker(scriptUrl, { 
+      type: 'module', 
+      name: `runtime-instance-${this.name}` })
 
     this.worker.onmessage = (event: MessageEvent) => {
-      const msg = event.data as WorkerOutMessage
-      if (msg.type === 'ready') {
-        this.ready = true
-      }
-      if (msg.type === 'serve:register') {
-        void this.registerServePort(msg.port)
-        this.emit('serve:register', msg)
-        return
-      }
-      if (msg.type === 'serve:unregister') {
-        this.unregisterServePort(msg.port)
-        this.emit('serve:unregister', msg)
-        return
-      }
-      if (msg.type === 'serve:response' || msg.type === 'serve:chunk' || msg.type === 'serve:end' || msg.type === 'serve:error') {
-        this.forwardServeResponse(msg)
-        return
-      }
-      if (msg.type === 'net:connect' || msg.type === 'net:send' || msg.type === 'net:close') {
-        this.handleNetMessage(msg)
-        return
-      }
-      if (msg.type === 'vfs:dump:result') {
-        const pending = this.vfsRequests.get(msg.id)
-        if (pending) {
-          this.vfsRequests.delete(msg.id)
-          pending.resolve(msg.snapshot)
+      const msg = event.data as WorkerOutMessage;
+
+      switch (msg.type) {
+        case 'ready':
+          this.ready = true;
+          this.emit('ready', msg);
+          break;
+
+        case 'serve:register':
+          void this.registerServePort(msg.port);
+          this.emit('serve:register', msg);
+          break;
+
+        case 'serve:unregister':
+          this.unregisterServePort(msg.port);
+          this.emit('serve:unregister', msg);
+          break;
+
+        case 'serve:response':
+        case 'serve:chunk':
+        case 'serve:end':
+        case 'serve:error':
+          this.forwardServeResponse(msg);
+          break;
+
+        case 'net:connect':
+        case 'net:send':
+        case 'net:close':
+          this.handleNetMessage(msg);
+          break;
+
+        case 'vfs:dump:result': {
+          const pending = this.vfsRequests.get(msg.id);
+          if (pending) {
+            this.vfsRequests.delete(msg.id);
+            pending.resolve(msg.snapshot);
+          }
+          break;
         }
-        return
-      }
-      if (msg.type === 'vfs:restore:result') {
-        const pending = this.vfsRestoreRequests.get(msg.id)
-        if (pending) {
-          this.vfsRestoreRequests.delete(msg.id)
-          pending.resolve()
+
+        case 'vfs:restore:result': {
+          const pending = this.vfsRestoreRequests.get(msg.id);
+          if (pending) {
+            this.vfsRestoreRequests.delete(msg.id);
+            pending.resolve();
+          }
+          break;
         }
-        return
+
+        default:
+          this.emit(msg.type, msg);
+          break;
       }
-      this.emit(msg.type, msg)
     }
 
     this.worker.onerror = (event: ErrorEvent) => {
       this.emit('error', { type: 'error', message: event.message ?? 'Worker error' })
     }
 
-    const initMsg: WorkerInMessage = {
+    const transferables: Transferable[] = wasmBytes ? [wasmBytes] : []
+    this.worker.postMessage({
       type: 'init',
       wasmBytes,
       files,
       env: this.options.env,
       sab: this.sabBridge?.sab,
-    }
-
-    const transferables: Transferable[] = wasmBytes ? [wasmBytes] : []
-    this.worker.postMessage(initMsg, transferables)
+    }, transferables)
 
     await new Promise<void>((resolve, reject) => {
       const timeout = setTimeout(() => {

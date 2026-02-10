@@ -1,6 +1,6 @@
-import type { AddRequest, BunAddOptions } from './types'
+import type { AddRequest, VitaminAddOptions } from './types'
 
-export function parseAddArgs(args: string[], options: BunAddOptions): AddRequest[] {
+export function parseAddArgs(args: string[], options: VitaminAddOptions): AddRequest[] {
   const dependencyType = options.peer
     ? 'peerDependencies'
     : options.optional

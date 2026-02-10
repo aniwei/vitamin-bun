@@ -20,9 +20,8 @@ export interface ModuleLoaderOptions {
   runtime: RuntimeGlobals
   coreModules?: Record<string, unknown>
   hooks?: {
-    onModuleResolve?: (id: string, parent?: string) => { id?: string; stop?: boolean } | void | Promise<{ id?: string; stop?: boolean } | void>
-    onModuleRequest?: (id: string, parent?: string) => { id?: string; exports?: Record<string, unknown>; stop?: boolean } | void | Promise<{ id?: string; exports?: Record<string, unknown>; stop?: boolean } | void>
-    onModuleLoadError?: (error: Error, id: string, parent?: string) => void
+    onResolve?: (id: string, parent?: string) => { id?: string; stop?: boolean } | void | Promise<{ id?: string; stop?: boolean } | void>
+    onError?: (error: Error, id: string, parent?: string) => void
   }
 }
 
@@ -65,24 +64,12 @@ export class ModuleLoader {
 
   async load(entry: string, parent?: string): Promise<ModuleRecord> {
     try {
-      const resolveResult = await this.hooks?.onModuleResolve?.(entry, parent)
-      if (resolveResult?.id) {
-        entry = resolveResult.id
-        if (resolveResult.stop) {
-          return { id: resolveResult.id, exports: {} }
-        }
-      }
+      const result = await this.hooks?.onResolve?.(entry, parent)
 
-      const hookResult = await this.hooks?.onModuleRequest?.(entry, parent)
-      if (hookResult?.exports) {
-        const id = hookResult.id ?? entry
-        return { id, exports: hookResult.exports }
-      }
-
-      if (hookResult?.id) {
-        entry = hookResult.id
-        if (hookResult.stop) {
-          return { id: entry, exports: {} }
+      if (result?.id) {
+        entry = result.id
+        if (result.stop) {
+          return { id: result.id, exports: {} }
         }
       }
 
@@ -96,12 +83,13 @@ export class ModuleLoader {
       }
 
       const resolved = this.resolve(entry, parent)
-      if (this.cache.has(resolved)) return this.cache.get(resolved)!
+      if (this.cache.has(resolved)) {
+        return this.cache.get(resolved) as ModuleRecord
+      }
 
       const ext = extname(resolved)
-      const loader = this.getLoader(ext)
 
-      if (loader === 'json') {
+      if (ext === '.json') {
         const jsonText = this.vfs.readFile(resolved)
         const module: ModuleRecord = { id: resolved, exports: {} }
         module.exports = JSON.parse(jsonText)
@@ -110,160 +98,19 @@ export class ModuleLoader {
       }
 
       const source = this.vfs.readFile(resolved)
-      const { code } = this.transpiler.compile(source, loader, resolved)
 
       const module: ModuleRecord = { id: resolved, exports: {} }
       this.cache.set(resolved, module)
 
-      this.preloadDependencies(source, resolved, loader)
-
-      const require = (id: string) => this.loadSync(id, resolved).exports
-
-      const fn = new Function(
-        'require',
-        'module',
-        'exports',
-        '__filename',
-        '__dirname',
-        'Vitamin',
-        'process',
-        'console',
-        code,
-      ) as (
-        require: (id: string) => unknown,
-        module: { exports: Record<string, unknown> },
-        exports: Record<string, unknown>,
-        __filename: string,
-        __dirname: string,
-        Vitamin: unknown,
-        process: unknown,
-        console: Console,
-      ) => void
-
+      const url = new URL(globalThis.location.href)
+      
       try {
-        fn(
-          require,
-          module as { exports: Record<string, unknown> },
-          module.exports,
-          resolved,
-          dirname(resolved),
-          this.runtime.Vitamin,
-          this.runtime.process,
-          this.runtime.console,
-        )
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err)
-        throw new Error(`Module execution failed: ${resolved}\n${message}`)
-      }
+        const content = `import '${url.origin}/@/${self.name}/${entry}'`
+        const blob = new Blob([content], { type: 'application/javascript' })
+        const blobUrl = URL.createObjectURL(blob)
+        await import(blobUrl)
 
-      this.applyInterop(module, resolved, source)
-
-      return module
-    } catch (err) {
-      this.reportLoadError(err, entry, parent)
-      throw err
-    }
-  }
-
-  loadSync(entry: string, parent?: string): ModuleRecord {
-    try {
-      let resolveResult = this.hooks?.onModuleResolve?.(entry, parent)
-      if (isPromise(resolveResult)) {
-        console.warn('onModuleResolve returned a Promise in loadSync; ignoring async result')
-        resolveResult = undefined
-      }
-
-      if (resolveResult?.id) {
-        entry = resolveResult.id
-        if (resolveResult.stop) {
-          return { id: resolveResult.id, exports: {} }
-        }
-      }
-
-      let hookResult = this.hooks?.onModuleRequest?.(entry, parent)
-      if (isPromise(hookResult)) {
-        console.warn('onModuleRequest returned a Promise in loadSync; ignoring async result')
-        hookResult = undefined
-      }
-
-      if (hookResult?.exports) {
-        const id = hookResult.id ?? entry
-        return { id, exports: hookResult.exports }
-      }
-
-      if (hookResult?.id) {
-        entry = hookResult.id
-        if (hookResult.stop) {
-          return { id: entry, exports: {} }
-        }
-      }
-
-      const normalizedCore = this.normalizeCoreModuleId(entry)
-
-      if (this.isCoreModule(normalizedCore)) {
-        const exports = this.coreModules[normalizedCore] as Record<string, unknown>
-        if (isUnavailableModule(exports)) {
-          throw new Error(exports.__unavailable)
-        }
-        return { id: normalizedCore, exports }
-      }
-
-      const resolved = this.resolve(entry, parent)
-      if (this.cache.has(resolved)) return this.cache.get(resolved)!
-
-      const ext = extname(resolved)
-      const loader = this.getLoader(ext)
-
-      if (loader === 'json') {
-        const jsonText = this.vfs.readFile(resolved)
-        const module: ModuleRecord = { id: resolved, exports: {} }
-        module.exports = JSON.parse(jsonText)
-        this.cache.set(resolved, module)
-        return module
-      }
-
-      const source = this.vfs.readFile(resolved)
-      const { code } = this.transpiler.compile(source, loader, resolved)
-
-      const module: ModuleRecord = { id: resolved, exports: {} }
-      this.cache.set(resolved, module)
-
-      this.preloadDependencies(source, resolved, loader)
-
-      const require = (id: string) => this.loadSync(id, resolved).exports
-
-      const fn = new Function(
-        'require',
-        'module',
-        'exports',
-        '__filename',
-        '__dirname',
-        'Vitamin',
-        'process',
-        'console',
-        code,
-      ) as (
-        require: (id: string) => unknown,
-        module: { exports: Record<string, unknown> },
-        exports: Record<string, unknown>,
-        __filename: string,
-        __dirname: string,
-        Vitamin: unknown,
-        process: unknown,
-        console: Console,
-      ) => void
-
-      try {
-        fn(
-          require,
-          module as { exports: Record<string, unknown> },
-          module.exports,
-          resolved,
-          dirname(resolved),
-          this.runtime.Vitamin,
-          this.runtime.process,
-          this.runtime.console,
-        )
+        debugger
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err)
         throw new Error(`Module execution failed: ${resolved}\n${message}`)
@@ -594,7 +441,7 @@ export class ModuleLoader {
 
   private reportLoadError(err: unknown, id: string, parent?: string): void {
     const error = err instanceof Error ? err : new Error(String(err))
-    this.hooks?.onModuleLoadError?.(error, id, parent)
+    this.hooks?.onModuleError?.(error, id, parent)
   }
 
   private applyInterop(module: ModuleRecord, resolved: string, source: string): void {

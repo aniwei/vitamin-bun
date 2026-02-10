@@ -1,5 +1,5 @@
 import React from 'react'
-import { createBunContainer } from '@vitamin-ai/sdk'
+import { createVitaminContainer } from '@vitamin-ai/sdk'
 import { ExampleRunner } from '../components/ExampleRunner'
 
 export function Example13PluginNetHttp() {
@@ -10,7 +10,7 @@ export function Example13PluginNetHttp() {
       description="Intercept net/tls/http modules via Bun.plugin."
       run={async ({ log }) => {
         log('⏳ Booting container...')
-        const container = await createBunContainer({
+        const container = await createVitaminContainer({
           files: {
             '/index.ts': `
               Bun.plugin({

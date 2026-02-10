@@ -1,5 +1,5 @@
 import React from 'react'
-import { createBunContainer } from '@vitamin-ai/sdk'
+import { createVitaminContainer } from '@vitamin-ai/sdk'
 import { ExampleRunner } from '../components/ExampleRunner'
 
 export function Example05NetworkSandbox() {
@@ -10,7 +10,7 @@ export function Example05NetworkSandbox() {
       description="Restrict network access and proxy localhost via Service Worker."
       run={async ({ log }) => {
         log('⏳ Booting container with network sandbox...')
-        const container = await createBunContainer({
+        const container = await createVitaminContainer({
           allowedHosts: ['api.github.com', 'httpbin.org'],
           serviceWorkerUrl: new URL('../../service-worker.ts', import.meta.url).toString(),
           env: { NODE_ENV: 'production' },

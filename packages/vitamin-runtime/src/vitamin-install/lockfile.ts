@@ -15,6 +15,7 @@ const LOCKFILE_NAME = 'bun.lock'
 
 export function readLockfile(ctx: InstallContext): Lockfile | null {
   const path = joinPath(ctx.cwd, LOCKFILE_NAME)
+  
   if (!ctx.vfs.exists(path)) return null
   try {
     const text = ctx.vfs.readFile(path)

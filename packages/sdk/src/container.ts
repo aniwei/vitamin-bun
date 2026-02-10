@@ -31,7 +31,7 @@ export class Readable {
   }
 }
 
-class BunContainer implements Container {
+class VitaminContainer implements Container {
   private worker: WasmWorker
   private vfs: VirtualFileSystem
 
@@ -199,7 +199,7 @@ class BunContainer implements Container {
  * Create a new Bun container that runs entirely in the browser.
  *
  * ```ts
- * const container = await createBunContainer({
+ * const container = await createVitaminContainer({
  *   wasmUrl: '/bun-core.wasm',
  *   files: { 'index.ts': 'console.log("hello")' },
  * })
@@ -210,7 +210,7 @@ class BunContainer implements Container {
  * await container.dispose()
  * ```
  */
-export async function createBunContainer(
+export async function createVitaminContainer(
   options: ContainerOptions,
 ): Promise<Container> {
   const vfs = new VirtualFileSystem()
@@ -229,12 +229,6 @@ export async function createBunContainer(
     }
   }
 
-  const httpProxy = new HttpProxy({
-    allowedHosts: options.allowedHosts,
-  })
-
-  const wsProxy = new WebSocketProxy()
-
   if (options.serviceWorkerUrl && 'serviceWorker' in navigator) {
     try {
       await navigator.serviceWorker.register(options.serviceWorkerUrl, {
@@ -247,8 +241,7 @@ export async function createBunContainer(
     }
   }
 
-  /// TODO: 未来支持 Wasm
-  const worker = new WasmWorker({
+  const worker = new WasmWorker(`aaa`, {
     wasmUrl: options.wasmUrl,
     workerUrl: options.workerUrl,
     crossOriginIsolated: globalThis.crossOriginIsolated ?? false,
@@ -282,12 +275,8 @@ export async function createBunContainer(
     })
   }
 
-  return new BunContainer(worker, vfs)
+  return new VitaminContainer(worker, vfs)
 }
-
-// ---------------------------------------------------------------------------
-// Internal utility
-// ---------------------------------------------------------------------------
 
 function concat(buffers: Uint8Array[]): Uint8Array {
   const total = buffers.reduce((s, b) => s + b.byteLength, 0)

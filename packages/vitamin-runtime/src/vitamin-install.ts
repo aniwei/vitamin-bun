@@ -52,36 +52,34 @@ const DEFAULT_REGISTRY = 'https://registry.npmjs.org'
 export async function install(options: VitaminInstallOptions): Promise<void> {
   const { vfs, stdout, stderr } = options
   const cwd = normalizeRoot(options.cwd ?? '/')
-  const fetchImpl = options.fetchImpl ?? fetch
   const registryUrl = options.registryUrl ?? DEFAULT_REGISTRY
   const enableScripts = options.enableScripts ?? false
-  const cache = await createInstallCache(options.cache ?? 'memory', options.cacheName)
+  const cache = await createInstallCache(options.cache ?? 'indexeddb', options.cacheName)
 
   const pkg = readPackageJson(vfs, joinPath(cwd, 'package.json'))
-  const deps = collectRootDependencies(pkg)
+  const deps = readRootDependencies(pkg)
   const workspacePackages = loadWorkspaces(vfs, cwd, pkg)
 
-  const installContext: InstallContext = {
+  const context: InstallContext = {
     vfs,
     cwd,
     registryUrl,
-    fetchImpl,
+    fetch: options.fetchImpl ?? fetch,
     enableScripts,
     cache,
     stdout,
     stderr,
   }
 
-  const initialRequests = Object.entries(deps).map(([name, spec]) => ({
+  const requests = Object.entries(deps).map(([name, spec]) => ({
     name,
     spec,
     optional: false,
   }))
 
-  const existingLockfile = readLockfile(installContext)
-
-  const flow = createInstallFlow(installContext, {
-    requests: initialRequests,
+  const existingLockfile = readLockfile(context)
+  const flow = createInstallFlow(context, {
+    requests,
     workspacePackages,
     existingLockfile,
     onStateChange: options.onStateChange,
@@ -95,11 +93,11 @@ export async function install(options: VitaminInstallOptions): Promise<void> {
   })
 
   const lockfile = await flow.run()
-  writeLockfile(installContext, lockfile)
+  writeLockfile(context, lockfile)
   stdout?.(`Installed ${Object.keys(lockfile.dependencies).length} packages.\n`)
 }
 
-function collectRootDependencies(pkg: PackageJson): Record<string, string> {
+function readRootDependencies(pkg: PackageJson): Record<string, string> {
   return {
     ...(pkg.dependencies ?? {}),
     ...(pkg.devDependencies ?? {}),

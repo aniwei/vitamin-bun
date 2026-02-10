@@ -1,5 +1,5 @@
 import React from 'react'
-import { createBunContainer } from '@vitamin-ai/sdk'
+import { createVitaminContainer } from '@vitamin-ai/sdk'
 import { ExampleRunner } from '../components/ExampleRunner'
 
 export function Example17PluginLifecycle() {
@@ -10,7 +10,7 @@ export function Example17PluginLifecycle() {
       description="Runtime init/dispose and module resolution hooks."
       run={async ({ log, setOutput }) => {
         setOutput('Booting container...\n')
-        const container = await createBunContainer({
+        const container = await createVitaminContainer({
           files: {
             '/index.ts': `
               Bun.plugin({

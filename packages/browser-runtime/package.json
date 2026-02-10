@@ -11,8 +11,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@vitamin-ai/vitamin-runtime": "workspace:*",
     "@vitamin-ai/wasm-host": "workspace:*",
-    "@vitamin-ai/vitamin-runtime": "workspace:*"
+    "morgan": "^1.10.1"
   },
   "devDependencies": {
     "typescript": "^5.7.0",
