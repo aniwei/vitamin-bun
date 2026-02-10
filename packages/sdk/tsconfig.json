@@ -1,0 +1,19 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src",
+    "composite": true,
+    "paths": {
+      "@vitamin-ai/virtual-fs": ["../virtual-fs/src/index.ts"],
+      "@vitamin-ai/browser-runtime": ["../browser-runtime/src/index.ts"],
+      "@vitamin-ai/network-proxy": ["../network-proxy/src/index.ts"]
+    }
+  },
+  "include": ["src"],
+  "references": [
+    { "path": "../virtual-fs" },
+    { "path": "../browser-runtime" },
+    { "path": "../network-proxy" }
+  ]
+}

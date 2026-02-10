@@ -1,0 +1,23 @@
+{
+  "cases": [
+    {
+      "name": "add-dependency",
+      "args": ["is-even"],
+      "expect": {
+        "manifest": { "dependencies": { "is-even": "latest" } },
+        "install": true,
+        "lockfile": true
+      }
+    },
+    {
+      "name": "add-dev-dependency",
+      "args": ["-d", "is-odd"],
+      "expect": {
+        "manifest": { "devDependencies": { "is-odd": "latest" } },
+        "install": true,
+        "lockfile": true
+      }
+    }
+  ],
+  "notes": "Fixtures describe expected bun add outcomes for parity validation."
+}

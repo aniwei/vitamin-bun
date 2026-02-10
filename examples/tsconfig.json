@@ -1,0 +1,27 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": ".",
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "paths": {
+      "@vitamin-ai/sdk": ["../packages/sdk/src/index.ts"],
+      "@vitamin-ai/wasm-host": ["../packages/wasm-host/src/index.ts"],
+      "@vitamin-ai/virtual-fs": ["../packages/virtual-fs/src/index.ts"],
+      "@vitamin-ai/browser-runtime": ["../packages/browser-runtime/src/index.ts"],
+      "@vitamin-ai/network-proxy": ["../packages/network-proxy/src/index.ts"]
+    }
+  },
+  "include": [
+    "**/*.ts",
+    "**/*.tsx"
+  ],
+  "references": [
+    { "path": "../packages/sdk" },
+    { "path": "../packages/wasm-host" },
+    { "path": "../packages/virtual-fs" },
+    { "path": "../packages/browser-runtime" },
+    { "path": "../packages/network-proxy" }
+  ]
+}

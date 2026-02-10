@@ -1,0 +1,19 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src",
+    "composite": true,
+    "paths": {
+      "@vitamin-ai/wasm-host": ["../wasm-host/src/index.ts"],
+      "@vitamin-ai/virtual-fs": ["../virtual-fs/src/index.ts"],
+      "@vitamin-ai/vitamin-runtime": ["../vitamin-runtime/src/index.ts"]
+    }
+  },
+  "include": ["src"],
+  "references": [
+    { "path": "../wasm-host" },
+    { "path": "../virtual-fs" },
+    { "path": "../vitamin-runtime" }
+  ]
+}

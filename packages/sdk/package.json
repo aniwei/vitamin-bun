@@ -1,0 +1,22 @@
+{
+  "name": "@vitamin-ai/sdk",
+  "version": "0.0.1",
+  "description": "Public API for embedding Bun-in-browser containers",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@vitamin-ai/browser-runtime": "workspace:*",
+    "@vitamin-ai/virtual-fs": "workspace:*",
+    "@vitamin-ai/network-proxy": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  }
+}
