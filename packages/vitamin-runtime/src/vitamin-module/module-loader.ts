@@ -105,12 +105,10 @@ export class ModuleLoader {
       const url = new URL(globalThis.location.href)
       
       try {
-        const content = `import '${url.origin}/@/${self.name}/${entry}'`
+        const content = `import '${url.origin}/@/${self.name}/vfs/${entry}'`
         const blob = new Blob([content], { type: 'application/javascript' })
         const blobUrl = URL.createObjectURL(blob)
         await import(blobUrl)
-
-        debugger
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err)
         throw new Error(`Module execution failed: ${resolved}\n${message}`)
@@ -441,7 +439,7 @@ export class ModuleLoader {
 
   private reportLoadError(err: unknown, id: string, parent?: string): void {
     const error = err instanceof Error ? err : new Error(String(err))
-    this.hooks?.onModuleError?.(error, id, parent)
+    this.hooks?.onError?.(error, id, parent)
   }
 
   private applyInterop(module: ModuleRecord, resolved: string, source: string): void {

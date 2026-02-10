@@ -6,6 +6,7 @@ export type WorkerInMessage =
   | { type: 'net:data'; socketId: number; data: Uint8Array }
   | { type: 'net:closed'; socketId: number }
   | { type: 'net:error'; socketId: number; message: string; code?: string }
+  | { type: 'vfs:request'; requestId: number; filename: string; }
   | { type: 'vfs:dump'; id: number }
   | { type: 'vfs:restore'; id: number; snapshot: VfsSnapshot }
   | { type: 'fs:write'; path: string; content: string | Uint8Array }
@@ -17,6 +18,10 @@ export type WorkerInMessage =
 
 export type WorkerOutMessage =
   | { type: 'ready' }
+  | { type: 'vfs:response'; requestId: number; status: number; headers: Record<string, string>; body: Uint8Array | null; stream: boolean }
+  | { type: 'vfs:chunk'; requestId: number; chunk: Uint8Array }
+  | { type: 'vfs:end'; requestId: number }
+  | { type: 'vfs:error'; requestId: number; message: string }
   | { type: 'stdout'; data: Uint8Array }
   | { type: 'stderr'; data: Uint8Array }
   | { type: 'exit'; id: number; code: number }
@@ -24,8 +29,8 @@ export type WorkerOutMessage =
   | { type: 'vfs:create'; path: string; kind: 'file' | 'directory' }
   | { type: 'vfs:delete'; path: string; kind: 'file' | 'directory' }
   | { type: 'vfs:move'; from: string; to: string; kind: 'file' | 'directory' }
-  | { type: 'serve:register'; port: number }
-  | { type: 'serve:unregister'; port: number }
+  | { type: 'serve:register'; name: string; port: number }
+  | { type: 'serve:unregister'; name: string; port: number }
   | { type: 'serve:response'; requestId: number; status: number; headers: Record<string, string>; body: Uint8Array | null; stream: boolean }
   | { type: 'serve:chunk'; requestId: number; chunk: Uint8Array }
   | { type: 'serve:end'; requestId: number }
@@ -33,6 +38,7 @@ export type WorkerOutMessage =
   | { type: 'net:connect'; socketId: number; host: string; port: number; tls: boolean }
   | { type: 'net:send'; socketId: number; data: Uint8Array }
   | { type: 'net:close'; socketId: number }
+  | { type: 'net:error'; socketId: number }
   | { type: 'vfs:dump:result'; id: number; snapshot: VfsSnapshot }
   | { type: 'vfs:restore:result'; id: number }
 

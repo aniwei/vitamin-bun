@@ -1,5 +1,5 @@
 import { VirtualFileSystem } from '@vitamin-ai/virtual-fs'
-import { WasmWorker } from '@vitamin-ai/browser-runtime'
+import { Runner } from '@vitamin-ai/browser-runtime'
 import { HttpProxy, WebSocketProxy } from '@vitamin-ai/network-proxy'
 import type {
   ContainerOptions,
@@ -32,16 +32,16 @@ export class Readable {
 }
 
 class VitaminContainer implements Container {
-  private worker: WasmWorker
+  private runner: Runner
   private vfs: VirtualFileSystem
 
   readonly fs: ContainerFS
 
   constructor(
-    worker: WasmWorker,
+    runner: Runner,
     vfs: VirtualFileSystem,
   ) {
-    this.worker = worker
+    this.runner = runner
     this.vfs = vfs
 
     this.fs = {
@@ -59,36 +59,36 @@ class VitaminContainer implements Container {
         content: string | Uint8Array,
       ): Promise<void> => {
         this.vfs.writeFile(path, content)
-        this.worker.writeFile(path, content)
+        this.runner.writeFile(path, content)
       },
       mkdir: async (path: string): Promise<void> => {
         this.vfs.mkdirp(path)
-        this.worker.mkdir(path)
+        this.runner.mkdir(path)
       },
       readdir: async (path: string): Promise<string[]> => {
         return this.vfs.readdir(path).map((e) => e.name)
       },
       unlink: async (path: string): Promise<void> => {
         this.vfs.unlink(path)
-        this.worker.unlink(path)
+        this.runner.unlink(path)
       },
       rename: async (from: string, to: string): Promise<void> => {
         this.vfs.rename(from, to)
-        this.worker.rename(from, to)
+        this.runner.rename(from, to)
       },
       exists: async (path: string): Promise<boolean> => {
         return this.vfs.exists(path)
       },
       save: async (): Promise<VfsSnapshot> => {
-        const snapshot = (await this.worker.dumpVfs()) as VfsSnapshot
+        const snapshot = (await this.runner.dumpVfs()) as VfsSnapshot
         return snapshot
       },
       restore: async (snapshot: VfsSnapshot): Promise<void> => {
-        await this.worker.restoreVfs(snapshot)
+        await this.runner.restoreVfs(snapshot)
         for (const [path, encoded] of Object.entries(snapshot.files)) {
           const bytes = base64ToBytes(encoded)
           this.vfs.writeFile(path, bytes)
-          this.worker.writeFile(path, bytes)
+          this.runner.writeFile(path, bytes)
         }
       },
     }
@@ -98,7 +98,7 @@ class VitaminContainer implements Container {
     const stdoutChunks: Uint8Array[] = []
     const stderrChunks: Uint8Array[] = []
 
-    const id = this.worker.exec(command, args)
+    const id = this.runner.exec(command, args)
 
     return new Promise<ExecResult>((resolve) => {
       const onStdout = (msg: { type: string; data?: Uint8Array }) => {
@@ -113,9 +113,10 @@ class VitaminContainer implements Container {
       }
       const onExit = (msg: { type: string; id?: number; code?: number }) => {
         if (msg.type === 'exit' && msg.id === id) {
-          this.worker.off('stdout', onStdout as never)
-          this.worker.off('stderr', onStderr as never)
-          this.worker.off('exit', onExit as never)
+          this.runner.off('stdout', onStdout as never)
+          this.runner.off('stderr', onStderr as never)
+          this.runner.off('exit', onExit as never)
+
           resolve({
             exitCode: msg.code ?? 1,
             stdout: decoder.decode(concat(stdoutChunks)),
@@ -124,14 +125,14 @@ class VitaminContainer implements Container {
         }
       }
 
-      this.worker.on('stdout', onStdout as never)
-      this.worker.on('stderr', onStderr as never)
-      this.worker.on('exit', onExit as never)
+      this.runner.on('stdout', onStdout as never)
+      this.runner.on('stderr', onStderr as never)
+      this.runner.on('exit', onExit as never)
     })
   }
 
   spawn(command: string, args: string[] = []): SpawnedProcess {
-    const id = this.worker.exec(command, args)
+    const id = this.runner.exec(command, args)
     const stdout = new Readable()
     const stderr = new Readable()
 
@@ -140,15 +141,15 @@ class VitaminContainer implements Container {
       exitResolve = resolve
     })
 
-    this.worker.on('stdout', ((msg: { type: string; data?: Uint8Array }) => {
+    this.runner.on('stdout', ((msg: { type: string; data?: Uint8Array }) => {
       if (msg.data) stdout.push(msg.data)
     }) as never)
 
-    this.worker.on('stderr', ((msg: { type: string; data?: Uint8Array }) => {
+    this.runner.on('stderr', ((msg: { type: string; data?: Uint8Array }) => {
       if (msg.data) stderr.push(msg.data)
     }) as never)
 
-    this.worker.on('exit', ((msg: {
+    this.runner.on('exit', ((msg: {
       type: string
       id?: number
       code?: number
@@ -163,9 +164,9 @@ class VitaminContainer implements Container {
       writeStdin: (data: string | Uint8Array) => {
         const bytes =
           typeof data === 'string' ? encoder.encode(data) : data
-        this.worker.sendStdin(bytes)
+        this.runner.sendStdin(bytes)
       },
-      kill: () => this.worker.kill(id),
+      kill: () => this.runner.kill(id),
       exited,
     }
   }
@@ -191,35 +192,18 @@ class VitaminContainer implements Container {
   }
 
   async dispose(): Promise<void> {
-    this.worker.destroy()
+    this.runner.dispose()
   }
 }
 
-/**
- * Create a new Bun container that runs entirely in the browser.
- *
- * ```ts
- * const container = await createVitaminContainer({
- *   wasmUrl: '/bun-core.wasm',
- *   files: { 'index.ts': 'console.log("hello")' },
- * })
- *
- * const result = await container.exec('bun', ['run', 'index.ts'])
- * console.log(result.stdout)
- *
- * await container.dispose()
- * ```
- */
 export async function createVitaminContainer(
   options: ContainerOptions,
 ): Promise<Container> {
   const vfs = new VirtualFileSystem()
   const initialFiles = withSourceMapUrls(options.files ?? {}, options.rootDir)
 
-  // Seed the filesystem with initial files.
   if (Object.keys(initialFiles).length > 0) {
     for (const [path, content] of Object.entries(initialFiles)) {
-      // Ensure parent directories exist.
       const parts = path.split('/')
       parts.pop()
       if (parts.length > 0) {
@@ -241,7 +225,7 @@ export async function createVitaminContainer(
     }
   }
 
-  const worker = new WasmWorker(`aaa`, {
+  const runner = new Runner(`aaa`, {
     wasmUrl: options.wasmUrl,
     workerUrl: options.workerUrl,
     crossOriginIsolated: globalThis.crossOriginIsolated ?? false,
@@ -249,33 +233,34 @@ export async function createVitaminContainer(
     allowedHosts: options.allowedHosts,
   })
 
-  await worker.boot(initialFiles)
+  await runner.boot(initialFiles)
 
   if (options.onVfsCreate || options.onVfsDelete || options.onVfsMove) {
-    worker.on('vfs:create', (msg) => {
+    runner.on('vfs:create', (msg) => {
       if (msg.type !== 'vfs:create') return
       options.onVfsCreate?.({ path: msg.path, kind: msg.kind })
     })
-    worker.on('vfs:delete', (msg) => {
+    runner.on('vfs:delete', (msg) => {
       if (msg.type !== 'vfs:delete') return
       options.onVfsDelete?.({ path: msg.path, kind: msg.kind })
     })
-    worker.on('vfs:move', (msg) => {
+    runner.on('vfs:move', (msg) => {
       if (msg.type !== 'vfs:move') return
       options.onVfsMove?.({ from: msg.from, to: msg.to, kind: msg.kind })
     })
   }
 
   if (options.onServeStart) {
-    worker.on('serve:register', (msg) => {
+    runner.on('serve:register', (msg) => {
       if (msg.type !== 'serve:register') return
+
       const origin = typeof location !== 'undefined' ? location.origin : 'http://localhost'
-      const url = `${origin}/@/vitamin_serve__${msg.port}`
+      const url = `${origin}/@/${msg.name}${msg.port}`
       options.onServeStart?.(url)
     })
   }
 
-  return new VitaminContainer(worker, vfs)
+  return new VitaminContainer(runner, vfs)
 }
 
 function concat(buffers: Uint8Array[]): Uint8Array {

@@ -2,20 +2,20 @@ import { SABBridge } from './sab-bridge'
 import type { WorkerInMessage, WorkerOutMessage, RuntimeOptions } from './types'
 
 
-export class WasmWorker {
+export class Runner {
   private name: string
   private worker: Worker | null = null
   private sabBridge: SABBridge | null = null
   private messageHandlers = new Map<string, Set<(data: WorkerOutMessage) => void>>()
   private processCounter = 0
-  private servePorts = new Map<number, MessagePort>()
-  private serveRequests = new Map<number, MessagePort>()
+  private requests = new Map<number, MessagePort>()
   private nextServeRequestId = 0
   private vfsCounter = 0
   private vfsRequests = new Map<number, { resolve: (snapshot: unknown) => void; reject: (err: Error) => void }>()
   private vfsRestoreRequests = new Map<number, { resolve: () => void; reject: (err: Error) => void }>()
-  private netSockets = new Map<number, WebSocket>()
-  private netProxyPort: MessagePort | null = null
+  private sockets = new Map<number, WebSocket>()
+  private proxyPort: MessagePort | null = null
+  private messagePort: MessagePort | null = null
   private allowedHosts: Set<string> | null
 
   ready = false
@@ -26,36 +26,38 @@ export class WasmWorker {
   }
 
   async boot(files: Record<string, string> = {}): Promise<void> {
-    let wasmBytes: ArrayBuffer | undefined
-    if (this.options.wasmUrl) {
-      const wasmResponse = await fetch(this.options.wasmUrl)
-      wasmBytes = await wasmResponse.arrayBuffer()
-    }
-
     if (this.options.crossOriginIsolated ?? crossOriginIsolated) {
       this.sabBridge = new SABBridge()
     }
 
     const scriptUrl = this.options.workerUrl
       ? new URL(this.options.workerUrl)
-      : new URL('./runtime-script.ts', import.meta.url)
+      : new URL('./boot-script.ts', import.meta.url)
 
     this.worker = new Worker(scriptUrl, { 
       type: 'module', 
-      name: `runtime-instance-${this.name}` })
+      name: `vitamin-runner-${this.name}` 
+    })
 
     this.worker.onmessage = (event: MessageEvent) => {
-      const msg = event.data as WorkerOutMessage;
+      const msg = event.data as WorkerOutMessage
 
       switch (msg.type) {
         case 'ready':
-          this.ready = true;
-          this.emit('ready', msg);
-          break;
+          this.ready = true
+          this.emit('ready', msg)
+          break
+
+        case 'vfs:response':
+        case 'vfs:chunk':
+        case 'vfs:end':
+        case 'vfs:error':
+          this.forwardVfsResponse(msg)
+          break
 
         case 'serve:register':
-          void this.registerServePort(msg.port);
-          this.emit('serve:register', msg);
+          void this.registerServePort(msg.port)
+          this.emit('serve:register', msg)
           break;
 
         case 'serve:unregister':
@@ -104,10 +106,10 @@ export class WasmWorker {
       this.emit('error', { type: 'error', message: event.message ?? 'Worker error' })
     }
 
-    const transferables: Transferable[] = wasmBytes ? [wasmBytes] : []
+    // TODO: 传输数据
+    const transferables: Transferable[] = []
     this.worker.postMessage({
       type: 'init',
-      wasmBytes,
       files,
       env: this.options.env,
       sab: this.sabBridge?.sab,
@@ -122,6 +124,7 @@ export class WasmWorker {
         clearTimeout(timeout)
         resolve()
       })
+
       this.on('error', (msg) => {
         clearTimeout(timeout)
         if ('message' in msg) {
@@ -130,7 +133,8 @@ export class WasmWorker {
       })
     })
 
-    void this.registerNetProxyPort()
+    this.register()
+    this.registerProxyPort()
   }
 
   exec(command: string, args: string[]): number {
@@ -190,21 +194,26 @@ export class WasmWorker {
     this.messageHandlers.get(type)?.delete(handler)
   }
 
-  destroy(): void {
+  dispose(): void {
     this.sabBridge?.stopListening()
-    for (const port of this.servePorts.values()) {
-      port.close()
-    }
-    this.servePorts.clear()
-    this.serveRequests.clear()
-    for (const socket of this.netSockets.values()) {
+    this.requests.clear()
+
+    this.messagePort?.postMessage({ 
+      type: 'unregister', 
+      name: this.name 
+    })
+    
+    for (const socket of this.sockets.values()) {
       socket.close()
     }
-    this.netSockets.clear()
-    this.netProxyPort?.close()
-    this.netProxyPort = null
+
+    this.sockets.clear()
+    this.proxyPort?.close()
+    this.proxyPort = null
+    
     this.vfsRequests.clear()
     this.vfsRestoreRequests.clear()
+    
     this.worker?.terminate()
     this.worker = null
     this.ready = false
@@ -221,16 +230,15 @@ export class WasmWorker {
     this.worker.postMessage(msg)
   }
 
-  private async registerServePort(port: number): Promise<void> {
-    if (this.servePorts.has(port)) return
+  private async register(): Promise<void> {
     if (!('serviceWorker' in navigator)) return
 
     const registration = await navigator.serviceWorker.ready
-    const controller = registration.active ?? registration.controller ?? navigator.serviceWorker.controller
+    const controller = registration.active ?? navigator.serviceWorker.controller
     if (!controller) {
       this.emit('error', { type: 'error', message: 'Service Worker not active for Bun.serve' })
       return
-    }
+    }    
 
     const channel = new MessageChannel()
     channel.port1.onmessage = (event: MessageEvent) => {
@@ -241,38 +249,90 @@ export class WasmWorker {
         headers: Record<string, string>
         body: Uint8Array | null
         responsePort: MessagePort
+      } | {
+        type: 'vfs:request'
+        filename: string
+        responsePort: MessagePort
       }
-      if (msg.type !== 'serve:request') return
+
+      if (msg.type !== 'serve:request' && msg.type !== 'vfs:request') return
+
       const requestId = ++this.nextServeRequestId
-      this.serveRequests.set(requestId, msg.responsePort)
+      this.requests.set(requestId, msg.responsePort)
       msg.responsePort.start?.()
+
       this.postMessage({
-        type: 'serve:request',
-        requestId,
-        method: msg.method,
-        url: msg.url,
-        headers: msg.headers,
-        body: msg.body,
+        ...msg,
+        requestId
       })
     }
+
     channel.port1.start()
 
-    controller.postMessage(
-      { type: 'register', port, messagePort: channel.port2 },
-      [channel.port2],
-    )
-    this.servePorts.set(port, channel.port1)
+    controller.postMessage({ 
+      type: 'register', 
+      messagePort: channel.port2 
+    }, [channel.port2])
+
+    this.messagePort = channel.port1
+  }
+
+  private async registerServePort(port: number): Promise<void> {
+    if (!('serviceWorker' in navigator)) return
+
+    const registration = await navigator.serviceWorker.ready
+    const controller = registration.active ?? navigator.serviceWorker.controller
+    if (!controller) {
+      this.emit('error', { type: 'error', message: 'Service Worker not active for Bun.serve' })
+      return
+    }
+
+    this.messagePort?.postMessage({ 
+      type: 'register:serve', 
+      name: this.name,
+      port, 
+    }, [])
   }
 
   private unregisterServePort(port: number): void {
-    const existing = this.servePorts.get(port)
-    if (existing) {
-      existing.close()
-      this.servePorts.delete(port)
+    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+      this.messagePort?.postMessage({ type: 'unregister:serve', port })
+    }
+  }
+
+  private forwardVfsResponse(msg: WorkerOutMessage): void {
+    if (msg.type !== 'vfs:response' && msg.type !== 'vfs:chunk' && msg.type !== 'vfs:end' && msg.type !== 'vfs:error') {
+      return
+    }
+    
+    const port = this.requests.get(msg.requestId)
+    if (!port) return
+
+    if (msg.type === 'vfs:response') {
+      port.postMessage({ type: 'vfs:response', status: msg.status, headers: msg.headers, body: msg.body, stream: msg.stream })
+      if (!msg.stream) {
+        this.requests.delete(msg.requestId)
+        port.close()
+      }
+      return
     }
 
-    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-      navigator.serviceWorker.controller.postMessage({ type: 'unregister', port })
+    if (msg.type === 'vfs:chunk') {
+      port.postMessage({ type: 'vfs:chunk', chunk: msg.chunk })
+      return
+    }
+
+    if (msg.type === 'vfs:end') {
+      port.postMessage({ type: 'vfs:end' })
+      this.requests.delete(msg.requestId)
+      port.close()
+      return
+    }
+
+    if (msg.type === 'vfs:error') {
+      port.postMessage({ type: 'vfs:error', message: msg.message })
+      this.requests.delete(msg.requestId)
+      port.close()
     }
   }
 
@@ -280,13 +340,13 @@ export class WasmWorker {
     if (msg.type !== 'serve:response' && msg.type !== 'serve:chunk' && msg.type !== 'serve:end' && msg.type !== 'serve:error') {
       return
     }
-    const port = this.serveRequests.get(msg.requestId)
+    const port = this.requests.get(msg.requestId)
     if (!port) return
 
     if (msg.type === 'serve:response') {
       port.postMessage({ type: 'serve:response', status: msg.status, headers: msg.headers, body: msg.body, stream: msg.stream })
       if (!msg.stream) {
-        this.serveRequests.delete(msg.requestId)
+        this.requests.delete(msg.requestId)
         port.close()
       }
       return
@@ -299,14 +359,14 @@ export class WasmWorker {
 
     if (msg.type === 'serve:end') {
       port.postMessage({ type: 'serve:end' })
-      this.serveRequests.delete(msg.requestId)
+      this.requests.delete(msg.requestId)
       port.close()
       return
     }
 
     if (msg.type === 'serve:error') {
       port.postMessage({ type: 'serve:error', message: msg.message })
-      this.serveRequests.delete(msg.requestId)
+      this.requests.delete(msg.requestId)
       port.close()
     }
   }
@@ -321,70 +381,112 @@ export class WasmWorker {
   }
 
   private handleNetMessage(msg: WorkerOutMessage): void {
-    if (msg.type === 'net:connect') {
-      if (!this.isHostAllowed(msg.host)) {
-        this.postMessage({ type: 'net:error', socketId: msg.socketId, message: `Connection to ${msg.host} blocked by allowedHosts policy`, code: 'EACCES' })
-        this.postMessage({ type: 'net:closed', socketId: msg.socketId })
-        return
+    switch (msg.type) {
+      case 'net:connect': {
+        if (!this.isHostAllowed(msg.host)) {
+          this.postMessage({ 
+            type: 'net:error', 
+            socketId: msg.socketId, 
+            message: `Connection to ${msg.host} blocked by allowedHosts policy`, 
+            code: 'EACCES' 
+          })
+
+          this.postMessage({ 
+            type: 'net:closed', 
+            socketId: msg.socketId 
+          })
+          return
+        }
+
+        if (!Number.isFinite(msg.port) || msg.port <= 0) {
+          this.postMessage({ 
+            type: 'net:error', 
+            socketId: msg.socketId, 
+            message: 'Invalid port', 
+            code: 'EINVAL' 
+          })
+
+          this.postMessage({ 
+            type: 'net:closed', 
+            socketId: msg.socketId 
+          })
+          return
+        }
+
+        const protocol = msg.tls ? 'wss' : 'ws'
+        const url = `${protocol}://${msg.host}:${msg.port}`
+        const ws = new WebSocket(url)
+
+        ws.binaryType = 'arraybuffer'
+        this.sockets.set(msg.socketId, ws)
+
+        ws.addEventListener('open', () => {
+          this.postMessage({ 
+            type: 'net:connected', 
+            socketId: msg.socketId 
+          })
+        })
+
+        ws.addEventListener('message', (event) => {
+          const data = event.data instanceof ArrayBuffer
+              ? new Uint8Array(event.data)
+              : new TextEncoder().encode(String(event.data))
+          this.postMessage({ type: 'net:data', socketId: msg.socketId, data })
+        })
+
+        ws.addEventListener('close', () => {
+          this.postMessage({ type: 'net:closed', socketId: msg.socketId })
+          this.sockets.delete(msg.socketId)
+        });
+
+        ws.addEventListener('error', () => {
+          this.postMessage({ 
+            type: 'net:error', 
+            socketId: msg.socketId, 
+            message: 'WebSocket connection error', 
+            code: 'ECONNREFUSED' 
+          })
+        })
+
+        break
       }
-      if (!Number.isFinite(msg.port) || msg.port <= 0) {
-        this.postMessage({ type: 'net:error', socketId: msg.socketId, message: 'Invalid port', code: 'EINVAL' })
-        this.postMessage({ type: 'net:closed', socketId: msg.socketId })
-        return
+
+      case 'net:send': {
+        const ws = this.sockets.get(msg.socketId)
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
+          this.postMessage({ type: 'net:error', socketId: msg.socketId, message: 'Socket is not connected', code: 'ENOTCONN' });
+          return
+        }
+
+        ws.send(msg.data)
+        break
       }
-      const protocol = msg.tls ? 'wss' : 'ws'
-      const url = `${protocol}://${msg.host}:${msg.port}`
-      const ws = new WebSocket(url)
-      ws.binaryType = 'arraybuffer'
-      this.netSockets.set(msg.socketId, ws)
 
-      ws.addEventListener('open', () => {
-        this.postMessage({ type: 'net:connected', socketId: msg.socketId })
-      })
-
-      ws.addEventListener('message', (event) => {
-        const data =
-          event.data instanceof ArrayBuffer
-            ? new Uint8Array(event.data)
-            : new TextEncoder().encode(String(event.data))
-        this.postMessage({ type: 'net:data', socketId: msg.socketId, data })
-      })
-
-      ws.addEventListener('close', () => {
-        this.postMessage({ type: 'net:closed', socketId: msg.socketId })
-        this.netSockets.delete(msg.socketId)
-      })
-
-      ws.addEventListener('error', () => {
-        this.postMessage({ type: 'net:error', socketId: msg.socketId, message: 'WebSocket connection error', code: 'ECONNREFUSED' })
-      })
-
-      return
-    }
-
-    if (msg.type === 'net:send') {
-      const ws = this.netSockets.get(msg.socketId)
-      if (!ws || ws.readyState !== WebSocket.OPEN) {
-        this.postMessage({ type: 'net:error', socketId: msg.socketId, message: 'Socket is not connected', code: 'ENOTCONN' })
-        return
+      case 'net:close': {
+        const ws = this.sockets.get(msg.socketId)
+        ws?.close()
+        this.sockets.delete(msg.socketId)
+        break
       }
-      ws.send(msg.data)
-      return
-    }
 
-    if (msg.type === 'net:close') {
-      const ws = this.netSockets.get(msg.socketId)
-      ws?.close()
-      this.netSockets.delete(msg.socketId)
+      default:
+        this.postMessage({ 
+          type: 'net:error', 
+          socketId: msg.socketId, 
+          message: 'Unknown net message type', 
+          code: 'EINVAL' 
+        })
+        break
     }
   }
 
-  private async registerNetProxyPort(): Promise<void> {
-    if (this.netProxyPort) return
+  private async registerProxyPort(): Promise<void> {
+    if (this.proxyPort) return
     if (!('serviceWorker' in navigator)) return
 
     const registration = await navigator.serviceWorker.ready
-    const controller = registration.active ?? registration.controller ?? navigator.serviceWorker.controller
+    const controller = registration.active ?? navigator.serviceWorker.controller
+    
     if (!controller) return
 
     const channel = new MessageChannel()
@@ -397,7 +499,7 @@ export class WasmWorker {
         responsePort: MessagePort
       }
       if (msg.type !== 'net:proxy:open') return
-      this.handleNetProxyOpen(msg.host, msg.port, msg.tls, msg.responsePort)
+      this.handleProxyOpen(msg.host, msg.port, msg.tls, msg.responsePort)
     }
     channel.port1.start()
 
@@ -406,15 +508,16 @@ export class WasmWorker {
       [channel.port2],
     )
 
-    this.netProxyPort = channel.port1
+    this.proxyPort = channel.port1
   }
 
-  private handleNetProxyOpen(host: string, port: number, tls: boolean, portChannel: MessagePort): void {
+  private handleProxyOpen(host: string, port: number, tls: boolean, portChannel: MessagePort): void {
     if (!this.isHostAllowed(host)) {
       portChannel.postMessage({ type: 'net:proxy:error', message: `Connection to ${host} blocked by allowedHosts policy`, code: 'EACCES' })
       portChannel.close()
       return
     }
+
     if (!Number.isFinite(port) || port <= 0) {
       portChannel.postMessage({ type: 'net:proxy:error', message: 'Invalid port', code: 'EINVAL' })
       portChannel.close()

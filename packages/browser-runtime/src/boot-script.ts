@@ -56,6 +56,12 @@ interface FsWriteMessage {
   content: string | Uint8Array
 }
 
+interface VfsRequestMessage {
+  type: 'vfs:request',
+  requestId: number
+  filename: string
+}
+
 interface VfsDumpMessage {
   type: 'vfs:dump'
   id: number
@@ -95,6 +101,7 @@ type IncomingMessage =
   | NetDataMessage
   | NetClosedMessage
   | NetErrorMessage
+  | VfsRequestMessage
   | VfsDumpMessage
   | VfsRestoreMessage
   | FsWriteMessage
@@ -235,6 +242,27 @@ function handleVfsRestore(msg: VfsRestoreMessage): void {
   post({ type: 'vfs:restore:result', id: msg.id })
 }
 
+async function handleVfsRequest(msg: VfsRequestMessage): Promise<void> {
+  if (!runtime) return
+  try {
+    
+    await postVfsResponse(msg.requestId, msg.filename)
+  } catch (err) {
+    post({ type: 'vfs:error', requestId: msg.requestId, message: String(err) })
+  }
+}
+
+async function postVfsResponse(requestId: number, filename: string): Promise<void> {
+  if (!vfs?.exists(filename)) {
+    post({ type: 'vfs:error', requestId, message: `File not found: ${filename}` })
+    return
+  }
+  
+  post({ type: 'vfs:response', requestId, stream: true })
+  post({ type: 'vfs:chunk', requestId, chunk: vfs?.readFile(filename) })
+  post({ type: 'vfs:end', requestId })
+}
+
 async function handleServeRequest(msg: ServeRequestMessage): Promise<void> {
   if (!runtime) return
   try {
@@ -314,6 +342,9 @@ self.onmessage = async (event: MessageEvent<IncomingMessage>) => {
     case 'net:closed':
     case 'net:error':
       handleNetMessage(msg)
+      break
+    case 'vfs:request':
+      await handleVfsRequest(msg)
       break
     case 'vfs:dump':
       handleVfsDump(msg)

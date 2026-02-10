@@ -1,10 +1,13 @@
 import { Context, App } from './app'
 
-const app = new App()
+
+type RunnerRecord = {
+  ports: number[],
+  messagePort: MessagePort
+}
 
 class NetworkProxyServiceWorker {
-  private ports = new Map<number, MessagePort>()
-  private netProxyPort: MessagePort | null = null
+  private runners = new Map<string, RunnerRecord>()
   private app: App
 
   constructor() {
@@ -16,8 +19,25 @@ class NetworkProxyServiceWorker {
       console.log(`${ctx.request.method} ${ctx.url.pathname} ${Date.now() - t}ms`)
     })
 
-    app.get('/@/:runtime-id/*filename', async (ctx, next) => {
-      debugger;
+    app.get('/@/:id/vfs/*filename', async (ctx, next) => {
+      const runner = this.runners.get(ctx.params.id)
+
+      if (runner) {
+        return this.forwardToVfs(runner.messagePort, ctx.url.pathname)
+      }
+
+      return new Response('Server Internal Error', { status: 500 })
+    })
+
+    app.all('/@/:id/serve/:port/*path', async (ctx, next) => {
+      const id = ctx.params.id
+      const runner = this.runners.get(id)
+
+      if (runner && runner.ports.includes(Number(ctx.params.port))) {
+        return this.forwardToServe(ctx.request, runner.messagePort, ctx.params.port)
+      }
+      
+      return new Response('Server Internal Error', { status: 500 })
     })
 
     app.use(async (ctx) => {
@@ -25,7 +45,6 @@ class NetworkProxyServiceWorker {
     })
 
     this.app = app
-
     this.registerEvents()
   }
 
@@ -49,14 +68,42 @@ class NetworkProxyServiceWorker {
   private onMessage = (event: Event) => {
     const msg = (event as MessageEvent).data as {
       type: 'register' | 'unregister'
-      port?: number
+      name?: string,
       messagePort?: MessagePort
+    } | {
+      port?: number
+      name?: string,
+      type: 'register:serve' | 'unregister:serve'
     }
 
-    if (msg.type === 'register' && msg.port !== undefined && msg.messagePort) {
-      this.ports.set(msg.port, msg.messagePort)
-    } else if (msg.type === 'unregister' && msg.port !== undefined) {
-      this.ports.delete(msg.port)
+    if (msg.name) {
+      switch (msg.type) {
+        case 'register:serve':
+          if (msg.port !== undefined) {
+            const runner = this.runners.get(msg.name)
+            if (runner && !runner.ports.includes(msg.port)) {
+              runner.ports.push(msg.port)
+            }
+          }
+          break
+        case 'unregister:serve':
+          if (msg.port !== undefined) {
+            const runner = this.runners.get(msg.name)
+            if (runner) {
+              runner.ports = runner.ports.filter((p) => p !== msg.port)
+            }
+          }
+          break
+
+        case 'register':
+          if (msg.messagePort) {
+            this.runners.set(msg.name, { ports: [], messagePort: msg.messagePort })
+          }
+          break
+        case 'unregister':
+          this.runners.delete(msg.name)
+          break
+      }
     } 
   }
 
@@ -66,7 +113,68 @@ class NetworkProxyServiceWorker {
     fetchEvent.respondWith(this.app.handle(context))
   }
 
-  private async redirectTo(
+  private async forwardToVfs(
+    port: MessagePort,
+    filename: string,
+  ): Promise<Response> {
+    return new Promise<Response>((resolve) => {
+      const channel = new MessageChannel()
+
+      let streamController: ReadableStreamDefaultController<Uint8Array> | null = null
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          streamController = controller
+        },
+      })
+
+      channel.port1.onmessage = (messageEvent: MessageEvent) => {
+        const res = messageEvent.data as
+          | { type: 'vfs:response'; status: number; headers: Record<string, string>; body: Uint8Array | null; stream: boolean }
+          | { type: 'vfs:chunk'; chunk: Uint8Array }
+          | { type: 'vfs:end' }
+          | { type: 'vfs:error'; message: string }
+
+        if (res.type === 'vfs:response') {
+          if (res.stream) {
+            resolve(new Response(stream, { status: res.status, headers: res.headers }))
+            return
+          }
+
+          resolve(
+            new Response(res.body ? (res.body as Uint8Array).slice().buffer as ArrayBuffer : null, {
+              status: res.status,
+              headers: res.headers,
+            }),
+          )
+          return
+        }
+
+        if (res.type === 'vfs:chunk' && streamController) {
+          streamController.enqueue(res.chunk)
+          return
+        }
+
+        if (res.type === 'vfs:end' && streamController) {
+          streamController.close()
+          return
+        }
+
+        if (res.type === 'vfs:error' && streamController) {
+          streamController.error(new Error(res.message))
+        }
+      }
+
+      channel.port1.start()
+
+      port.postMessage({
+        type: 'vfs:request',
+        filename,
+        responsePort: channel.port2,
+      }, [channel.port2])
+    })
+  }
+
+  private async forwardToServe(
     request: Request,
     port: MessagePort,
     targetUrl: string,
@@ -128,17 +236,14 @@ class NetworkProxyServiceWorker {
 
       channel.port1.start()
 
-      port.postMessage(
-        {
-          type: 'serve:request',
-          method: request.method,
-          url: targetUrl,
-          headers,
-          body,
-          responsePort: channel.port2,
-        },
-        [channel.port2],
-      )
+      port.postMessage({
+        type: 'serve:request',
+        method: request.method,
+        url: targetUrl,
+        headers,
+        body,
+        responsePort: channel.port2,
+      }, [channel.port2])
     })
   }
 }

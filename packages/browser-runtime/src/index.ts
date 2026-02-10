@@ -1,4 +1,4 @@
-export { WasmWorker } from './worker'
+export { Runner } from './runner'
 export { SABBridge } from './sab-bridge'
 export {
   type WorkerInMessage,
