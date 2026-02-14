@@ -1,6 +1,7 @@
+import invariant from 'invariant'
 import { VirtualFileSystem } from '@vitamin-ai/virtual-fs'
-import { Runner } from '@vitamin-ai/browser-runtime'
-import { HttpProxy, WebSocketProxy } from '@vitamin-ai/network-proxy'
+import { BootService, MessagePayload } from '@vitamin-ai/browser-runtime'
+import { base64ToBytes, bytesToBase64 } from '@vitamin-ai/shared'
 import type {
   ContainerOptions,
   ExecResult,
@@ -9,6 +10,7 @@ import type {
   Container,
   VfsSnapshot,
 } from './types'
+import { ServeRegisterPayload, VfsCreatePayload, VfsDeletePayload, VfsMovePayload } from '@vitamin-ai/browser-runtime/src/types'
 
 const encoder = new TextEncoder()
 const decoder = new TextDecoder()
@@ -32,73 +34,37 @@ export class Readable {
 }
 
 class VitaminContainer implements Container {
-  private runner: Runner
-  private vfs: VirtualFileSystem
+  #boot: BootService | null = null
+  get boot() {
+    invariant(this.#boot, 'Boot service is not initialized')
+    return this.#boot
+  }
+  set boot(boot: BootService) {
+    if (this.#boot) {
+      this.#boot.dispose()
+    }
 
-  readonly fs: ContainerFS
+    boot.on('error', (msg) => console.error(msg))
+
+    this.#boot = boot
+  }
+
+  get fs(): ContainerFS {
+    invariant(this.boot, 'WorkerBoot is not initialized')
+    return this.boot
+  }
 
   constructor(
-    runner: Runner,
-    vfs: VirtualFileSystem,
+    boot: BootService
   ) {
-    this.runner = runner
-    this.vfs = vfs
-
-    this.fs = {
-      readFile: async (
-        path: string,
-        encoding?: string,
-      ): Promise<string | Uint8Array> => {
-        if (encoding === 'utf8' || encoding === 'utf-8') {
-          return this.vfs.readFile(path)
-        }
-        return this.vfs.readFileBytes(path)
-      },
-      writeFile: async (
-        path: string,
-        content: string | Uint8Array,
-      ): Promise<void> => {
-        this.vfs.writeFile(path, content)
-        this.runner.writeFile(path, content)
-      },
-      mkdir: async (path: string): Promise<void> => {
-        this.vfs.mkdirp(path)
-        this.runner.mkdir(path)
-      },
-      readdir: async (path: string): Promise<string[]> => {
-        return this.vfs.readdir(path).map((e) => e.name)
-      },
-      unlink: async (path: string): Promise<void> => {
-        this.vfs.unlink(path)
-        this.runner.unlink(path)
-      },
-      rename: async (from: string, to: string): Promise<void> => {
-        this.vfs.rename(from, to)
-        this.runner.rename(from, to)
-      },
-      exists: async (path: string): Promise<boolean> => {
-        return this.vfs.exists(path)
-      },
-      save: async (): Promise<VfsSnapshot> => {
-        const snapshot = (await this.runner.dumpVfs()) as VfsSnapshot
-        return snapshot
-      },
-      restore: async (snapshot: VfsSnapshot): Promise<void> => {
-        await this.runner.restoreVfs(snapshot)
-        for (const [path, encoded] of Object.entries(snapshot.files)) {
-          const bytes = base64ToBytes(encoded)
-          this.vfs.writeFile(path, bytes)
-          this.runner.writeFile(path, bytes)
-        }
-      },
-    }
+    this.boot = boot
   }
 
   async exec(command: string, args: string[] = []): Promise<ExecResult> {
     const stdoutChunks: Uint8Array[] = []
     const stderrChunks: Uint8Array[] = []
 
-    const id = this.runner.exec(command, args)
+    const id = this.boot.exec(command, args)
 
     return new Promise<ExecResult>((resolve) => {
       const onStdout = (msg: { type: string; data?: Uint8Array }) => {
@@ -113,9 +79,9 @@ class VitaminContainer implements Container {
       }
       const onExit = (msg: { type: string; id?: number; code?: number }) => {
         if (msg.type === 'exit' && msg.id === id) {
-          this.runner.off('stdout', onStdout as never)
-          this.runner.off('stderr', onStderr as never)
-          this.runner.off('exit', onExit as never)
+          this.boot.off('stdout', onStdout as never)
+          this.boot.off('stderr', onStderr as never)
+          this.boot.off('exit', onExit as never)
 
           resolve({
             exitCode: msg.code ?? 1,
@@ -125,14 +91,14 @@ class VitaminContainer implements Container {
         }
       }
 
-      this.runner.on('stdout', onStdout as never)
-      this.runner.on('stderr', onStderr as never)
-      this.runner.on('exit', onExit as never)
+      this.boot.on('stdout', onStdout as never)
+      this.boot.on('stderr', onStderr as never)
+      this.boot.on('exit', onExit as never)
     })
   }
 
   spawn(command: string, args: string[] = []): SpawnedProcess {
-    const id = this.runner.exec(command, args)
+    const id = this.boot.exec(command, args)
     const stdout = new Readable()
     const stderr = new Readable()
 
@@ -141,15 +107,15 @@ class VitaminContainer implements Container {
       exitResolve = resolve
     })
 
-    this.runner.on('stdout', ((msg: { type: string; data?: Uint8Array }) => {
+    this.boot.on('stdout', ((msg: { type: string; data?: Uint8Array }) => {
       if (msg.data) stdout.push(msg.data)
     }) as never)
 
-    this.runner.on('stderr', ((msg: { type: string; data?: Uint8Array }) => {
+    this.boot.on('stderr', ((msg: { type: string; data?: Uint8Array }) => {
       if (msg.data) stderr.push(msg.data)
     }) as never)
 
-    this.runner.on('exit', ((msg: {
+    this.boot.on('exit', ((msg: {
       type: string
       id?: number
       code?: number
@@ -164,9 +130,9 @@ class VitaminContainer implements Container {
       writeStdin: (data: string | Uint8Array) => {
         const bytes =
           typeof data === 'string' ? encoder.encode(data) : data
-        this.runner.sendStdin(bytes)
+        this.boot.stdin(bytes)
       },
-      kill: () => this.runner.kill(id),
+      kill: () => this.boot.kill(id),
       exited,
     }
   }
@@ -175,8 +141,6 @@ class VitaminContainer implements Container {
     path: string,
     files: Record<string, string>,
   ): Promise<void> {
-    this.vfs.mkdirp(path)
-
     for (const [name, content] of Object.entries(files)) {
       const fullPath = path.endsWith('/')
         ? `${path}${name}`
@@ -185,140 +149,88 @@ class VitaminContainer implements Container {
       const parts = fullPath.split('/')
       parts.pop()
       if (parts.length > 0) {
-        this.vfs.mkdirp(parts.join('/'))
+        await this.fs.mkdirp(parts.join('/'))
       }
-      this.vfs.writeFile(fullPath, content)
+
+      await this.fs.writeFile(fullPath, content)
     }
   }
 
   async dispose(): Promise<void> {
-    this.runner.dispose()
+    this.boot.dispose()
   }
 }
 
 export async function createVitaminContainer(
   options: ContainerOptions,
 ): Promise<Container> {
-  const vfs = new VirtualFileSystem()
-  const initialFiles = withSourceMapUrls(options.files ?? {}, options.rootDir)
+  const { files, serviceWorkerUrl } = options
 
-  if (Object.keys(initialFiles).length > 0) {
-    for (const [path, content] of Object.entries(initialFiles)) {
-      const parts = path.split('/')
-      parts.pop()
-      if (parts.length > 0) {
-        vfs.mkdirp(parts.join('/'))
-      }
-      vfs.writeFile(path, content)
-    }
-  }
-
-  if (options.serviceWorkerUrl && 'serviceWorker' in navigator) {
+  if (serviceWorkerUrl && 'serviceWorker' in navigator) {
     try {
-      await navigator.serviceWorker.register(options.serviceWorkerUrl, {
+      await navigator.serviceWorker.register(serviceWorkerUrl, {
         scope: '/',
         type: 'module',
       })
+
       await navigator.serviceWorker.ready
     } catch {
-      console.warn('[vitamin] Service Worker registration failed')
+      console.warn('Service Worker registration failed')
     }
   }
 
-  const runner = new Runner(`aaa`, {
-    wasmUrl: options.wasmUrl,
-    workerUrl: options.workerUrl,
+  const { allowedHosts, workerUrl, env } = options
+
+  const boot = new BootService(`Add`, {
+    workerUrl,
     crossOriginIsolated: globalThis.crossOriginIsolated ?? false,
-    env: options.env,
-    allowedHosts: options.allowedHosts,
+    env,
+    allowedHosts
   })
 
-  await runner.boot(initialFiles)
 
-  if (options.onVfsCreate || options.onVfsDelete || options.onVfsMove) {
-    runner.on('vfs:create', (msg) => {
-      if (msg.type !== 'vfs:create') return
-      options.onVfsCreate?.({ path: msg.path, kind: msg.kind })
+  await boot.start(files)
+
+  const { onVfsCreate, onVfsDelete, onVfsMove, onServeStart } = options
+
+  if (onVfsCreate || onVfsDelete || onVfsMove) {
+    boot.on('vfs:create', (data: unknown) => {
+      const msg = data as VfsCreatePayload
+      onVfsCreate?.({ path: msg.path, kind: msg.kind })
     })
-    runner.on('vfs:delete', (msg) => {
-      if (msg.type !== 'vfs:delete') return
-      options.onVfsDelete?.({ path: msg.path, kind: msg.kind })
+
+    boot.on('vfs:delete', (data: unknown) => {
+      const msg = data as VfsDeletePayload
+      onVfsDelete?.({ path: msg.path, kind: msg.kind })
     })
-    runner.on('vfs:move', (msg) => {
-      if (msg.type !== 'vfs:move') return
-      options.onVfsMove?.({ from: msg.from, to: msg.to, kind: msg.kind })
+
+    boot.on('vfs:move', (data: unknown) => {
+      const msg = data as VfsMovePayload
+      onVfsMove?.({ from: msg.from, to: msg.to, kind: msg.kind })
     })
   }
 
-  if (options.onServeStart) {
-    runner.on('serve:register', (msg) => {
-      if (msg.type !== 'serve:register') return
-
+  if (onServeStart) {
+    boot.on('serve:register', (data: unknown) => {
+      const msg = data as ServeRegisterPayload
       const origin = typeof location !== 'undefined' ? location.origin : 'http://localhost'
       const url = `${origin}/@/${msg.name}${msg.port}`
-      options.onServeStart?.(url)
+      onServeStart?.(url)
     })
   }
 
-  return new VitaminContainer(runner, vfs)
+  return new VitaminContainer(boot)
 }
 
 function concat(buffers: Uint8Array[]): Uint8Array {
   const total = buffers.reduce((s, b) => s + b.byteLength, 0)
   const result = new Uint8Array(total)
   let offset = 0
+
   for (const buf of buffers) {
     result.set(buf, offset)
     offset += buf.byteLength
   }
+
   return result
-}
-
-function base64ToBytes(encoded: string): Uint8Array {
-  const binary = atob(encoded)
-  const bytes = new Uint8Array(binary.length)
-  for (let i = 0; i < binary.length; i += 1) {
-    bytes[i] = binary.charCodeAt(i)
-  }
-  return bytes
-}
-
-function withSourceMapUrls(
-  files: Record<string, string>,
-  rootDir?: string,
-): Record<string, string> {
-  const normalizedRoot = normalizeRootDir(rootDir ?? 'root')
-  const result: Record<string, string> = {}
-
-  for (const [path, content] of Object.entries(files)) {
-    const fileName = path.split('/').filter(Boolean).pop() ?? 'index.ts'
-    result[path] = appendSourceMapUrl(content, normalizedRoot, fileName)
-  }
-  return result
-}
-
-function appendSourceMapUrl(content: string, rootDir: string, fileName: string): string {
-  if (!shouldAppendSourceMap(fileName)) return content
-  if (content.includes('sourceMappingURL=')) return content
-
-  const suffix = `//# sourceMappingURL=@vitamin-ai/${rootDir}/${fileName}`
-  
-  if (content.endsWith('\n')) return content + suffix + '\n'
-  return content + '\n' + suffix + '\n'
-}
-
-function shouldAppendSourceMap(fileName: string): boolean {
-  const lower = fileName.toLowerCase()
-  if (lower.endsWith('.json')) return false
-  
-  return lower.endsWith('.ts')
-    || lower.endsWith('.tsx')
-    || lower.endsWith('.js')
-    || lower.endsWith('.jsx')
-    || lower.endsWith('.mjs')
-    || lower.endsWith('.cjs')
-}
-
-function normalizeRootDir(rootDir: string): string {
-  return rootDir.split('/').filter(Boolean).join('/') || 'root'
 }

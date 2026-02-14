@@ -11,7 +11,7 @@ export function Example10BunServeWebsocket() {
       run={async ({ log }) => {
         log('⏳ Booting container...')
         const container = await createVitaminContainer({
-          serviceWorkerUrl: new URL('../../service-worker.ts', import.meta.url).toString(),
+          serviceWorkerUrl: new URL('../../vitamin-service-worker.ts', import.meta.url).toString(),
           files: {
             '/server.ts': `
               Bun.serve({

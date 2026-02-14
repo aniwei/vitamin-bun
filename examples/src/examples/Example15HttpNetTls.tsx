@@ -11,7 +11,7 @@ export function Example15HttpNetTls() {
       run={async ({ log, setOutput }) => {
         setOutput('Booting container...\n')
         const container = await createVitaminContainer({
-          serviceWorkerUrl: new URL('../../service-worker.ts', import.meta.url).toString(),
+          serviceWorkerUrl: new URL('../../vitamin-service-worker.ts', import.meta.url).toString(),
           allowedHosts: ['httpbin.org', 'example.com'],
           files: {
             '/client.ts': `

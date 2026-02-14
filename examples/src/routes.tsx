@@ -19,6 +19,8 @@ import {
   Example18ViteReact,
   Example19BunInstallWorkspaces,
   Example20BunAdd,
+  Example21Share,
+  Example22Run,
 } from './examples'
 
 export const examples = [
@@ -141,5 +143,17 @@ export const examples = [
     label: '20 — Bun Add',
     description: 'Add dependencies with bun add.',
     Component: Example20BunAdd,
+  },
+  {
+    path: '/21-share',
+    label: '21 — Share',
+    description: 'Share a dependency and inspect the updated manifest.',
+    Component: Example21Share,
+  },
+  {
+    path: '/22-run',
+    label: '22 — Run',
+    description: 'Share a dependency and inspect the updated manifest.',
+    Component: Example22Run,
   },
 ]

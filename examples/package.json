@@ -16,6 +16,7 @@
     "react-arborist": "^3.4.3",
     "hono": "^4.6.0",
     "@vitamin-ai/sdk": "workspace:*",
+    "@vitamin-ai/shared": "workspace:*",
     "@vitamin-ai/wasm-host": "workspace:*",
     "@vitamin-ai/virtual-fs": "workspace:*",
     "@vitamin-ai/browser-runtime": "workspace:*",

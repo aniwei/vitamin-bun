@@ -13,7 +13,7 @@ export function Example14HonoServer() {
         const registry = `${location.origin}/npm`
 
         const container = await createVitaminContainer({
-          serviceWorkerUrl: new URL('../../service-worker.ts', import.meta.url).toString(),
+          serviceWorkerUrl: new URL('../../vitamin-service-worker.ts', import.meta.url).toString(),
           env: {
             BUN_INSTALL_REGISTRY: registry,
           },

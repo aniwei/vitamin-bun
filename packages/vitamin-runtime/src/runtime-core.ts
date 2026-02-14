@@ -105,9 +105,7 @@ export class RuntimeCore {
           this.options.env?.NPM_CONFIG_REGISTRY
         const progressPrefix = '__VITAMIN_INSTALL_PROGRESS__ '
         const emitProgress = (payload: Record<string, unknown>) => {
-          this.evaluator.runtime.process.stdout.write(
-            `${progressPrefix}${JSON.stringify(payload)}\n`,
-          )
+          this.evaluator.runtime.process.stdout.write(`${progressPrefix}${JSON.stringify(payload)}\n`)
         }
 
         await install({
@@ -142,7 +140,7 @@ export class RuntimeCore {
     await runAddFlow({
       vfs: this.options.vfs,
       cwd,
-      requests,
+      requests
     })
 
     const registryUrl =
@@ -323,22 +321,24 @@ export class RuntimeCore {
     options: SpawnOptions,
   ): { exitCode: number; stdout: Uint8Array; stderr: Uint8Array } {
     const runtime = this.evaluator.runtime
+    const env = runtime.process.env
+
+    runtime.process.env = { ...env, ...(options.env ?? {}) }
+
     const stdoutChunks: Uint8Array[] = []
     const stderrChunks: Uint8Array[] = []
-    const originalStdout = runtime.process.stdout.write
-    const originalStderr = runtime.process.stderr.write
-    const originalEnv = runtime.process.env
+    const stdout = runtime.process.stdout.write
+    const stderr = runtime.process.stderr.write
 
-    runtime.process.env = { ...originalEnv, ...(options.env ?? {}) }
     runtime.process.stdout.write = (data: string | Uint8Array) => {
       const bytes = typeof data === 'string' ? new TextEncoder().encode(data) : data
       stdoutChunks.push(bytes)
-      originalStdout(data)
+      stdout(data)
     }
     runtime.process.stderr.write = (data: string | Uint8Array) => {
       const bytes = typeof data === 'string' ? new TextEncoder().encode(data) : data
       stderrChunks.push(bytes)
-      originalStderr(data)
+      stderr(data)
     }
 
     let exitCode = 0
@@ -351,9 +351,9 @@ export class RuntimeCore {
       const message = err instanceof Error ? err.stack ?? err.message : String(err)
       this.options.onStderr?.(new TextEncoder().encode(message + '\n'))
     } finally {
-      runtime.process.stdout.write = originalStdout
-      runtime.process.stderr.write = originalStderr
-      runtime.process.env = originalEnv
+      runtime.process.stdout.write = stdout
+      runtime.process.stderr.write = stderr
+      runtime.process.env = env
     }
 
     return {

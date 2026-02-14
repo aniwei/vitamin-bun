@@ -34,7 +34,6 @@ export function Example20BunAdd() {
           },
         })
 
-        debugger
         const result = await container.exec('vitamin', ['add', 'is-even'])
         log(result.stdout || '')
         log(result.stderr || '')

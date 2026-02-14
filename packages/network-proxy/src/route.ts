@@ -69,64 +69,82 @@ export class Response {
   }
 }
 
-export class Context {
+interface ContextOptions<T extends Router = Router> {
+  app: T,
+  event: FetchEvent
+  request: globalThis.Request
+  url: URL
+}
+
+export class Context<T extends Router = Router> {
+  readonly app: T
   readonly event: FetchEvent
   readonly request: globalThis.Request
   readonly url: URL
-  params: Record<string, string>
-  private reqHelper: Request
-  private resHelper: Response
-
-  constructor(args: { event: FetchEvent; request: globalThis.Request; url: URL }) {
-    this.event = args.event
-    this.request = args.request
-    this.url = args.url
-    this.params = {}
-    this.reqHelper = new Request(this)
-    this.resHelper = new Response()
-  }
+  #req: Request
+  #res: Response
+  
 
   get req(): Request {
-    return this.reqHelper
+    return this.#req
   }
 
   get res(): Response {
-    return this.resHelper
+    return this.#res
+  }
+
+  #params: Record<string, string>
+  get params(): Record<string, string> {
+    return this.#params
+  }
+  set params(value: Record<string, string>) {
+    this.#params = value
+  }
+
+  constructor(options: ContextOptions<T>) {
+    this.event = options.event
+    this.request = options.request
+    this.url = options.url
+
+    this.#params = {}
+    this.app = options.app
+    this.#req = new Request(this)
+    this.#res = new Response()
   }
 
   header(name: string, value: string): void {
-    this.resHelper.header(name, value)
+    this.#res.header(name, value)
   }
 
   text(body: string, init: ResponseInit = {}): globalThis.Response {
-    const responseInit = this.resHelper.build(init, {
+    const responseInit = this.#res.build(init, {
       'content-type': 'text/plain; charset=utf-8',
     })
     return new globalThis.Response(body, responseInit)
   }
 
   json(data: unknown, init: ResponseInit = {}): globalThis.Response {
-    const responseInit = this.resHelper.build(init, {
+    const responseInit = this.#res.build(init, {
       'content-type': 'application/json; charset=utf-8',
     })
     return new globalThis.Response(JSON.stringify(data), responseInit)
   }
 
   html(body: string, init: ResponseInit = {}): globalThis.Response {
-    const responseInit = this.resHelper.build(init, {
+    const responseInit = this.#res.build(init, {
       'content-type': 'text/html; charset=utf-8',
     })
     return new globalThis.Response(body, responseInit)
   }
 
   redirect(location: string, status: number = 302): globalThis.Response {
-    this.resHelper.status(status)
-    const responseInit = this.resHelper.build(undefined, { location })
+    this.#res.status(status)
+    const responseInit = this.#res.build(undefined, { location })
     return new globalThis.Response(null, responseInit)
   }
 }
 
-export type FetchHandler = (
+export type RouterHandler = (
   ctx: Context,
   next: Next,
 ) => Promise<globalThis.Response | void> | globalThis.Response | void
@@ -136,15 +154,15 @@ type RouteLayer = {
   pattern: string
   keys: string[]
   regex: RegExp
-  handler: FetchHandler
+  handler: RouterHandler
 }
 
-export class App {
+export class Router {
   private routes: RouteLayer[] = []
 
-  use(...handlers: FetchHandler[]): this
-  use(pattern: string, ...handlers: FetchHandler[]): this
-  use(patternOrHandler: string | FetchHandler, ...handlers: FetchHandler[]): this {
+  use(...handlers: RouterHandler[]): this
+  use(pattern: string, ...handlers: RouterHandler[]): this
+  use(patternOrHandler: string | RouterHandler, ...handlers: RouterHandler[]): this {
     if (typeof patternOrHandler === 'string') {
       this.add('ALL', patternOrHandler, handlers)
       return this
@@ -154,36 +172,36 @@ export class App {
     return this
   }
 
-  on(method: string, pattern: string, ...handlers: FetchHandler[]): this {
+  on(method: string, pattern: string, ...handlers: RouterHandler[]): this {
     this.add(method.toUpperCase(), pattern, handlers)
     return this
   }
 
-  all(pattern: string, ...handlers: FetchHandler[]): this {
+  all(pattern: string, ...handlers: RouterHandler[]): this {
     return this.on('ALL', pattern, ...handlers)
   }
 
-  get(pattern: string, ...handlers: FetchHandler[]): this {
+  get(pattern: string, ...handlers: RouterHandler[]): this {
     return this.on('GET', pattern, ...handlers)
   }
 
-  post(pattern: string, ...handlers: FetchHandler[]): this {
+  post(pattern: string, ...handlers: RouterHandler[]): this {
     return this.on('POST', pattern, ...handlers)
   }
 
-  put(pattern: string, ...handlers: FetchHandler[]): this {
+  put(pattern: string, ...handlers: RouterHandler[]): this {
     return this.on('PUT', pattern, ...handlers)
   }
 
-  delete(pattern: string, ...handlers: FetchHandler[]): this {
+  delete(pattern: string, ...handlers: RouterHandler[]): this {
     return this.on('DELETE', pattern, ...handlers)
   }
 
-  patch(pattern: string, ...handlers: FetchHandler[]): this {
+  patch(pattern: string, ...handlers: RouterHandler[]): this {
     return this.on('PATCH', pattern, ...handlers)
   }
 
-  options(pattern: string, ...handlers: FetchHandler[]): this {
+  options(pattern: string, ...handlers: RouterHandler[]): this {
     return this.on('OPTIONS', pattern, ...handlers)
   }
 
@@ -227,7 +245,7 @@ export class App {
     return response ?? fetch(ctx.request)
   }
 
-  private add(method: string, pattern: string, handlers: FetchHandler[]): void {
+  private add(method: string, pattern: string, handlers: RouterHandler[]): void {
     if (handlers.length === 0) return
     const compiled = compileRoute(pattern)
     for (const handler of handlers) {

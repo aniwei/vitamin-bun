@@ -38,6 +38,9 @@ importers:
       '@vitamin-ai/sdk':
         specifier: workspace:*
         version: link:../packages/sdk
+      '@vitamin-ai/shared':
+        specifier: workspace:*
+        version: link:../packages/shared
       '@vitamin-ai/virtual-fs':
         specifier: workspace:*
         version: link:../packages/virtual-fs
@@ -81,6 +84,9 @@ importers:
 
   packages/browser-runtime:
     dependencies:
+      '@vitamin-ai/shared':
+        specifier: workspace:*
+        version: link:../shared
       '@vitamin-ai/vitamin-runtime':
         specifier: workspace:*
         version: link:../vitamin-runtime
@@ -91,6 +97,12 @@ importers:
         specifier: ^1.10.1
         version: 1.10.1
     devDependencies:
+      '@types/invariant':
+        specifier: ^2.2.4
+        version: 2.2.37
+      invariant:
+        specifier: ^2.2.4
+        version: 2.2.4
       typescript:
         specifier: ^5.7.0
         version: 5.9.3
@@ -99,7 +111,20 @@ importers:
         version: 3.2.4(@types/node@22.19.10)
 
   packages/network-proxy:
+    dependencies:
+      '@vitamin-ai/browser-runtime':
+        specifier: workspace:*
+        version: link:../browser-runtime
+      '@vitamin-ai/shared':
+        specifier: workspace:*
+        version: link:../shared
+      invariant:
+        specifier: ^2.2.4
+        version: 2.2.4
     devDependencies:
+      '@types/invariant':
+        specifier: ^2.2.4
+        version: 2.2.37
       typescript:
         specifier: ^5.7.0
         version: 5.9.3
@@ -115,10 +140,34 @@ importers:
       '@vitamin-ai/network-proxy':
         specifier: workspace:*
         version: link:../network-proxy
+      '@vitamin-ai/shared':
+        specifier: workspace:*
+        version: link:../shared
       '@vitamin-ai/virtual-fs':
         specifier: workspace:*
         version: link:../virtual-fs
     devDependencies:
+      '@types/invariant':
+        specifier: ^2.2.4
+        version: 2.2.37
+      invariant:
+        specifier: ^2.2.4
+        version: 2.2.4
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.0
+        version: 3.2.4(@types/node@22.19.10)
+
+  packages/shared:
+    devDependencies:
+      '@types/invariant':
+        specifier: ^2.2.4
+        version: 2.2.37
+      invariant:
+        specifier: ^2.2.4
+        version: 2.2.4
       typescript:
         specifier: ^5.7.0
         version: 5.9.3
@@ -791,6 +840,9 @@ packages:
   '@types/estree@1.0.8':
     resolution: {integrity: sha512-dWHzHa2WqEXI/O1E9OjrocMTKJl2mSrEolh1Iomrv6U+JuNwaHXsXx9bLu5gG7BUWFIN0skIQJQ/L1rIex4X6w==}
 
+  '@types/invariant@2.2.37':
+    resolution: {integrity: sha512-IwpIMieE55oGWiXkQPSBY1nw1nFs6bsKXTFskNY8sdS17K24vyEBRQZEwlRS7ZmXCWnJcQtbxWzly+cODWGs2A==}
+
   '@types/node@22.19.10':
     resolution: {integrity: sha512-tF5VOugLS/EuDlTBijk0MqABfP8UxgYazTLo3uIn3b4yJgg26QRbVYJYsDtHrjdDUIRfP70+VfhTTc+CE1yskw==}
 
@@ -976,6 +1028,9 @@ packages:
   hono@4.11.8:
     resolution: {integrity: sha512-eVkB/CYCCei7K2WElZW9yYQFWssG0DhaDhVvr7wy5jJ22K+ck8fWW0EsLpB0sITUTvPnc97+rrbQqIr5iqiy9Q==}
     engines: {node: '>=16.9.0'}
+
+  invariant@2.2.4:
+    resolution: {integrity: sha512-phJfQVBuaJM5raOpJjSfkiD6BpbCE4Ns//LaXl6wGYtUBY83nWS6Rf9tXm2e8VaK60JEjYldbPif/A2B1C2gNA==}
 
   js-tokens@4.0.0:
     resolution: {integrity: sha512-RdJUflcE3cUzKiMqQgsCu06FPu9UdIJO0beYbPhHN4k6apgJtifcoCtT9bcxOpYBtpD2kCM6Sbzg4CausW/PKQ==}
@@ -1799,6 +1854,8 @@ snapshots:
 
   '@types/estree@1.0.8': {}
 
+  '@types/invariant@2.2.37': {}
+
   '@types/node@22.19.10':
     dependencies:
       undici-types: 6.21.0
@@ -2019,6 +2076,10 @@ snapshots:
       react-is: 16.13.1
 
   hono@4.11.8: {}
+
+  invariant@2.2.4:
+    dependencies:
+      loose-envify: 1.4.0
 
   js-tokens@4.0.0: {}
 

@@ -12,7 +12,7 @@ export function Example05NetworkSandbox() {
         log('⏳ Booting container with network sandbox...')
         const container = await createVitaminContainer({
           allowedHosts: ['api.github.com', 'httpbin.org'],
-          serviceWorkerUrl: new URL('../../service-worker.ts', import.meta.url).toString(),
+          serviceWorkerUrl: new URL('../../vitamin-service-worker.ts', import.meta.url).toString(),
           env: { NODE_ENV: 'production' },
           files: {
             '/server.ts': `

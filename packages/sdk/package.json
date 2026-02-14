@@ -12,10 +12,13 @@
   },
   "dependencies": {
     "@vitamin-ai/browser-runtime": "workspace:*",
-    "@vitamin-ai/virtual-fs": "workspace:*",
-    "@vitamin-ai/network-proxy": "workspace:*"
+    "@vitamin-ai/network-proxy": "workspace:*",
+    "@vitamin-ai/shared": "workspace:*",
+    "@vitamin-ai/virtual-fs": "workspace:*"
   },
   "devDependencies": {
+    "@types/invariant": "^2.2.4",
+    "invariant": "^2.2.4",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"
   }

@@ -1,3 +1,4 @@
+import { BootServiceFS } from '@vitamin-ai/browser-runtime'
 import type { Readable } from './container'
 
 
@@ -31,17 +32,7 @@ export interface SpawnedProcess {
   exited: Promise<number>
 }
 
-export interface ContainerFS {
-  readFile(path: string, encoding?: string): Promise<string | Uint8Array>
-  writeFile(path: string, content: string | Uint8Array): Promise<void>
-  mkdir(path: string): Promise<void>
-  readdir(path: string): Promise<string[]>
-  unlink(path: string): Promise<void>
-  rename(from: string, to: string): Promise<void>
-  exists(path: string): Promise<boolean>
-  save(): Promise<VfsSnapshot>
-  restore(snapshot: VfsSnapshot): Promise<void>
-}
+export interface ContainerFS extends BootServiceFS { }
 
 export interface VfsSnapshot {
   files: Record<string, string>

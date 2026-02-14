@@ -5,12 +5,22 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
+  "dependencies": {
+    "@vitamin-ai/shared": "workspace:*",
+    "@vitamin-ai/browser-runtime": "workspace:*",
+    "invariant": "^2.2.4"
+  },
   "devDependencies": {
+    "@types/invariant": "^2.2.4",
+    "invariant": "^2.2.4",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"
   }

@@ -55,7 +55,25 @@ export class Evaluator {
       this.pluginManager.register(plugin)
     }
     
-    void this.pluginManager.init()
+    this.pluginManager.init()
+
+    Reflect.defineProperty(self, 'process', {
+      get: () => {
+        return this.vitaminRuntime.process
+      }
+    })
+
+    Reflect.defineProperty(self, 'console', {
+      get: () => {
+        return this.vitaminRuntime.console
+      }
+    })
+
+    Reflect.defineProperty(self, 'Vitamin', {
+      get: () => {
+        return this.vitaminRuntime.Vitamin
+      }
+    })
   }
 
   async run(entry: string): Promise<void> {
