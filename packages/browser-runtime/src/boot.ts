@@ -1,11 +1,12 @@
 import invariant from 'invariant'
-import { MainChannel, MixinPendingTask, PendingTask } from '@vitamin-ai/shared'
+import { WorkerChannel, MixinPendingTask, PendingTask, encoder } from '@vitamin-ai/shared'
 import { SABBridge } from './sab-bridge'
 import { ServiceChannel } from './service'
 import type {
   BootServiceFS,
   EventMessage,
   IncomingMessage,
+  MessagePayload,
   OutgoingMessage,
   ResponseMessage,
   RuntimeOptions,
@@ -13,7 +14,7 @@ import type {
   VfsSnapshot
 } from './types'
 
-export class BootService extends MixinPendingTask(MainChannel as any) implements BootServiceFS {
+export class BootService extends MixinPendingTask(WorkerChannel) implements BootServiceFS {
   #sabBridge: SABBridge | null = null
   get sabBridge() {
     invariant(this.#sabBridge, 'SABBridge is not initialized')
@@ -58,11 +59,12 @@ export class BootService extends MixinPendingTask(MainChannel as any) implements
     if (!pendingTask) {
       console.warn(`No pending task for response with id ${msg.id}`)
     } else if (msg.payload) {
-      pendingTask.resolve(msg.payload)
+      if (!msg.stream) {
+        pendingTask.resolve(msg.payload)
+      }
     }
   }
     
-
   private stream(msg: StreamMessage): void {
     const pendingTask = this.pendingTasks.get(msg.id) as PendingTask
     if (!pendingTask) {
@@ -93,14 +95,14 @@ export class BootService extends MixinPendingTask(MainChannel as any) implements
     switch (msg.type) {
       case 'response': 
         this.response(msg as ResponseMessage)
-        break;
+        break
       case 'stream:chunk':
       case 'stream:end': 
       case 'stream:error': 
         this.stream(msg as StreamMessage)
         break
       case 'event': {
-        const { name, ...rest } = (msg as EventMessage).payload || {}
+        const { name, ...rest } = (msg as EventMessage).payload as MessagePayload
         this.emit(name, rest)
         break
       }
@@ -199,7 +201,25 @@ export class BootService extends MixinPendingTask(MainChannel as any) implements
         break
       }
       case 'vfs:request':
-        this.readFile((msg as any).filename)
+        this.readFile((msg as any).filename).then(content => {
+          this.service.forwardTo({
+            id: msg.id,
+            type: 'response',
+            stream: false,
+            payload: {
+              status: 200,
+              headers: { 'Content-Type': 'application/javascript' },
+              body: content instanceof Uint8Array 
+                ? content 
+                : encoder.encode(content)
+            },
+          })
+        }).catch(err => {
+          this.service.forwardTo({
+            type: 'error',
+            message: err instanceof Error ? err.message : String(err)
+          })
+        })
         break
     
       default:
@@ -223,15 +243,15 @@ export class BootService extends MixinPendingTask(MainChannel as any) implements
   }
 
   exec(command: string, args: string[] = []): Promise<number> {
-    const id = Math.floor(Math.random() * Number.MAX_SAFE_INTEGER)
+    const pid = Math.floor(Math.random() * Number.MAX_SAFE_INTEGER)
 
     return this.forwardTo<void>({ 
       type: 'exec', 
-      id,
+      pid,
       command, 
       args
     }).then(() => {
-      return id
+      return pid
     })
   }
 
@@ -240,6 +260,7 @@ export class BootService extends MixinPendingTask(MainChannel as any) implements
       this.#sabBridge = new SABBridge()
     }
 
+    await this.register()
     await super.start()
     this.post({
       type: 'start',
@@ -247,8 +268,6 @@ export class BootService extends MixinPendingTask(MainChannel as any) implements
       env: this.options.env,
       sab: this.sabBridge
     })    
-
-    await this.register()
   }
 
   dispose(): void {

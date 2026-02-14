@@ -1,8 +1,9 @@
 
 
+import { SimpleEmitter, encoder } from '@vitamin-ai/shared'
 import { Context, Router } from './route'
 import { ChannelManager } from './channel'
-import { SimpleEmitter } from '../../shared/dist'
+import { IncomingMessage, ResponsePayload } from './types'
 
 class NetworkProxy extends SimpleEmitter {
   constructor() {
@@ -32,8 +33,6 @@ class App extends Router {
   constructor() {
     super()
 
-    
-
     this.#network.on('install', () => {
       (self as unknown as ServiceWorkerGlobalScope).skipWaiting()
     })
@@ -44,8 +43,7 @@ class App extends Router {
     })
 
     this.#network.on('message', (data) => {
-      // TODO: use a better message format
-      const msg = data as { type: string, name?: string, port: number, messagePort: MessagePort }
+      const msg = data as IncomingMessage 
 
       if (msg.name) {
         switch (msg.type) {
@@ -83,8 +81,12 @@ const app = new App()
 
 app.use(async (ctx, next) => {
   const t = Date.now()
-  await next()
-  console.log(`${ctx.request.method} ${ctx.url.pathname} ${Date.now() - t}ms`)
+  try {
+    const res = await next()
+    console.log(`${ctx.request.method} ${ctx.url.pathname} ${res?.status} ${Date.now() - t}ms`)
+  } catch (err) {
+    console.error(`${ctx.request.method} ${ctx.url.pathname} 500 ${Date.now() - t}ms`, err)
+  }
 })
 
 app.all('/@/:id/serve/*path', async (ctx, next) => {
@@ -108,10 +110,20 @@ app.all('/@/:id/vfs/*path', async (ctx, next) => {
     return channel.forwardTo({
       type: 'vfs:request',
       filename: ctx.params.path,
+    }).then((content: ResponsePayload) => {
+      const body = content.body instanceof Uint8Array
+        ? content.body
+        : encoder.encode(content.body || '')
+
+      return new Response(body, {
+        status: content.status,
+        headers: content.headers
+      })
     })
   }
 })
 
 app.use(async (ctx) => {
+  console.log('No route matched, performing default fetch for', ctx.request.url)
   return fetch(ctx.request.url)
 })

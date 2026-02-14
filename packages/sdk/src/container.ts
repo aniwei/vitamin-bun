@@ -1,19 +1,20 @@
 import invariant from 'invariant'
-import { VirtualFileSystem } from '@vitamin-ai/virtual-fs'
-import { BootService, MessagePayload } from '@vitamin-ai/browser-runtime'
-import { base64ToBytes, bytesToBase64 } from '@vitamin-ai/shared'
+import { BootService } from '@vitamin-ai/browser-runtime'
+import { ExitPayload, SimpleEmitter, StderrPayload, StdoutPayload, decoder } from '@vitamin-ai/shared'
+import { 
+  ServeRegisterPayload, 
+  VfsCreatePayload, 
+  VfsDeletePayload, 
+  VfsMovePayload 
+} from '@vitamin-ai/browser-runtime/src/types'
 import type {
   ContainerOptions,
   ExecResult,
   SpawnedProcess,
   ContainerFS,
   Container,
-  VfsSnapshot,
 } from './types'
-import { ServeRegisterPayload, VfsCreatePayload, VfsDeletePayload, VfsMovePayload } from '@vitamin-ai/browser-runtime/src/types'
-
-const encoder = new TextEncoder()
-const decoder = new TextDecoder()
+import { CommandTask, MixinCommandTask } from './command'
 
 export class Readable {
   private listeners = new Set<(data: Uint8Array) => void>()
@@ -33,7 +34,7 @@ export class Readable {
   }
 }
 
-class VitaminContainer implements Container {
+class BootCommand extends SimpleEmitter {
   #boot: BootService | null = null
   get boot() {
     invariant(this.#boot, 'Boot service is not initialized')
@@ -54,51 +55,52 @@ class VitaminContainer implements Container {
     return this.boot
   }
 
-  constructor(
-    boot: BootService
-  ) {
+  constructor(boot: BootService) {
+    super()
     this.boot = boot
   }
+} 
 
+class VitaminContainer extends MixinCommandTask(BootCommand) implements Container {
   async exec(command: string, args: string[] = []): Promise<ExecResult> {
     const stdoutChunks: Uint8Array[] = []
     const stderrChunks: Uint8Array[] = []
 
-    const id = this.boot.exec(command, args)
-
-    return new Promise<ExecResult>((resolve) => {
-      const onStdout = (msg: { type: string; data?: Uint8Array }) => {
-        if (msg.type === 'stdout' && msg.data) {
-          stdoutChunks.push(msg.data)
-        }
-      }
-      const onStderr = (msg: { type: string; data?: Uint8Array }) => {
-        if (msg.type === 'stderr' && msg.data) {
-          stderrChunks.push(msg.data)
-        }
-      }
-      const onExit = (msg: { type: string; id?: number; code?: number }) => {
-        if (msg.type === 'exit' && msg.id === id) {
-          this.boot.off('stdout', onStdout as never)
-          this.boot.off('stderr', onStderr as never)
-          this.boot.off('exit', onExit as never)
-
-          resolve({
-            exitCode: msg.code ?? 1,
-            stdout: decoder.decode(concat(stdoutChunks)),
-            stderr: decoder.decode(concat(stderrChunks)),
-          })
-        }
+    return this.execute(async (task: CommandTask) => {
+      const onStdout = (stdout: unknown) => {
+        const msg = stdout as StdoutPayload
+        if (msg.data) stdoutChunks.push(msg.data)
       }
 
-      this.boot.on('stdout', onStdout as never)
-      this.boot.on('stderr', onStderr as never)
-      this.boot.on('exit', onExit as never)
+      const onStderr = (stderr: unknown) => {
+        const msg = stderr as StderrPayload
+        if (msg.data) stderrChunks.push(msg.data)
+      }
+
+      const onExit = (data: unknown) => {
+        const msg = data as ExitPayload
+
+        this.boot.off('stdout', onStdout as never)
+        this.boot.off('stderr', onStderr as never)
+        this.boot.off('exit', onExit as never)
+
+        task.resolve({
+          exitCode: msg.code ?? 1,
+          stdout: decoder.decode(concat(stdoutChunks)),
+          stderr: decoder.decode(concat(stderrChunks)),
+        })
+      }
+
+      this.boot.on('stdout', onStdout)
+      this.boot.on('stderr', onStderr)
+      this.boot.on('exit', onExit)
+
+      const pid = await this.boot.exec(command, args)
     })
   }
 
-  spawn(command: string, args: string[] = []): SpawnedProcess {
-    const id = this.boot.exec(command, args)
+  async spawn(command: string, args: string[] = []): Promise<SpawnedProcess> {
+    const pid = await this.boot.exec(command, args)
     const stdout = new Readable()
     const stderr = new Readable()
 
@@ -187,7 +189,6 @@ export async function createVitaminContainer(
     env,
     allowedHosts
   })
-
 
   await boot.start(files)
 

@@ -1,4 +1,7 @@
-export { WorkerChannel, MainChannel, ChannelPort } from './channel'
+export const encoder = new TextEncoder()
+export const decoder = new TextDecoder()
+
+export { WorkerChannelPort, WorkerChannel, Channel, ChannelPort } from './channel'
 export { SimpleEmitter } from './simple-emitter'
 export { warnUnsupported} from './warn-unsupported'
 export { base64ToBytes, bytesToBase64 } from './base64'

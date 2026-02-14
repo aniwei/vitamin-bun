@@ -1,36 +1,33 @@
-import { SimpleEmitter } from './simple-emitter'
+import { SimpleEmitter } from '@vitamin-ai/shared'
 
-export interface PendingTask<T = unknown> {
+export interface CommandTask<T = unknown> {
   id: number
   resolve: (value: T) => void
   reject: (err: unknown) => void
-  chunks?: Uint8Array[]
-  stream?: boolean
-  forward?: (msg: unknown) => void
 }
 
-export interface PendingTaskHost extends SimpleEmitter {
-  post: (data: object) => void
+export interface CommandTaskHost extends SimpleEmitter {
+  
 }
 
 export type Constructor<T = object> = abstract new (...args: any[]) => T
 
-export function MixinPendingTask<TBase extends Constructor<PendingTaskHost>>(Base: TBase) {
-  abstract class PendingScheduler extends Base {
-    pendingId: number = 0
-    pendingTasks: Map<number, PendingTask<unknown>> = new Map()
+export function MixinCommandTask<TBase extends Constructor<CommandTaskHost>>(Base: TBase) {
+  abstract class CommandScheduler extends Base {
+    commandId: number = 0
+    commandTasks: Map<number, CommandTask<unknown>> = new Map()
 
     get pendingTask() {
-      return this.pendingTasks.get(this.pendingId) ?? null
+      return this.commandTasks.get(this.commandId) ?? null
     }
 
-    forwardTo<T>(data: object, timeoutMs: number = 0): Promise<T> {
-      const id = ++this.pendingId
+    execute<T>(command: (task: CommandTask) => void, timeoutMs: number = 0): Promise<T> {
+      const id = ++this.commandId
 
       return new Promise((resolve, reject) => {
         let timeout: ReturnType<typeof setTimeout> | null = timeoutMs > 0 
           ? setTimeout(() => {
-              const task = this.pendingTasks.get(id)
+              const task = this.commandTasks.get(id)
               if (task) task.reject(new Error('Request timed out'))
             }, timeoutMs)
           : null
@@ -41,11 +38,11 @@ export function MixinPendingTask<TBase extends Constructor<PendingTaskHost>>(Bas
             timeout = null
           }
 
-          this.pendingTasks.delete(id)
+          this.commandTasks.delete(id)
           callback()
         }
 
-        const pendingTask: PendingTask<unknown> = {
+        const commandTask: CommandTask<unknown> = {
           id,
           resolve: (result: unknown) => {
             timeout ? cleanup(() => resolve(result as T)) : resolve(result as T)
@@ -55,15 +52,12 @@ export function MixinPendingTask<TBase extends Constructor<PendingTaskHost>>(Bas
           }
         }
 
-        this.pendingTasks.set(id, pendingTask)
-        this.post({
-          ...data,
-          id
-        })
+        this.commandTasks.set(id, commandTask)
+        command(commandTask)
       })
     }
   }
 
-  return PendingScheduler
+  return CommandScheduler
 }
 

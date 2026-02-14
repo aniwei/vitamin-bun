@@ -1,8 +1,5 @@
 import invariant from 'invariant'
-import { MessagePortLike, MixinPendingTask, ChannelPort } from '@vitamin-ai/shared'
-import { ServeForward, VfsForward } from './nat'
-
-
+import { MessagePortLike, MixinPendingTask, ChannelPort, OutgoingMessage, ResponseMessage } from '@vitamin-ai/shared'
 
 export class Channel extends MixinPendingTask(ChannelPort<MessagePortLike> as any) {
   #ports: number[] = []
@@ -16,6 +13,27 @@ export class Channel extends MixinPendingTask(ChannelPort<MessagePortLike> as an
   constructor(messagePort: MessagePort) {
     super()
     this.messagePort = messagePort
+    this.on('message', this.onMessage.bind(this))
+  }
+
+  private response(msg: ResponseMessage): void {
+    const pendingTask = this.pendingTasks.get(msg.id)
+    if (!pendingTask) {
+      console.warn(`No pending task for response with id ${msg.id}`)
+    } else if (msg.payload) {
+      if (!msg.stream) {
+        pendingTask.resolve(msg.payload)
+      }
+    }
+  }
+
+  onMessage(data: unknown) {
+    const msg = data as OutgoingMessage
+    switch (msg.type) {
+      case 'response':
+        this.response(msg as ResponseMessage)
+        break
+    }
   }
 
   dispose () {

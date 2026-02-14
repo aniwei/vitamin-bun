@@ -20,15 +20,25 @@ export function Example22Run() {
           },
           files: {
             '/index.ts': `
-              import isEven from 'is-even'
-              console.log('isEven(4)', isEven(4))
-              console.log('isEven(5)', isEven(5))
-            `
+              debugger
+              console.log('isEven(4)')
+              console.log('isEven(5)')
+            `,
+            '/package.json': JSON.stringify({
+              name: 'demo-bun-add',
+              version: '0.0.0',
+              dependencies: {},
+            }, null, 2,),
           },
         })
 
+        const result1 = await container.exec('vitamin', ['add', 'is-even'])
+        log(result1.stdout || '')
+        log(result1.stderr || '')
 
-        const result1 = await container.exec('vitamin', ['run', 'index.ts'])
+        const result2 = await container.exec('vitamin', ['run', 'index.ts'])
+        log(result2.stdout || '')
+        log(result2.stderr || '')
       }}
     />
   )

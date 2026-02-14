@@ -1,25 +1,13 @@
-import { WorkerChannel, MixinPendingTask } from '@vitamin-ai/shared'
+import { Channel, MixinPendingTask } from '@vitamin-ai/shared'
 
-export class ServiceChannel extends MixinPendingTask(WorkerChannel as any) {
+export class ServiceChannel extends MixinPendingTask(Channel) {
   private name: string
-  private onMessage(msg: unknown): void {
-    switch ((msg as { type: string }).type) {
-      case 'serve:request':
-        break
-      case 'vfs:request': {
-        break
-      }
-    }
-  }
-
   constructor(name: string) {
     super()
 
     this.name = name
-    this.on('message', this.onMessage.bind(this))
+    this.on('message', (msg: unknown) => this.emit('service', msg))
   }
-
-  process(data: unknown): void {}
 
   async register(): Promise<void> {
     if (!('serviceWorker' in navigator)) return

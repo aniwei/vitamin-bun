@@ -1,3 +1,4 @@
+import * as ts from 'typescript'
 import { Evaluator } from './evaluator'
 import { createCoreModules } from './core-modules/index'
 import { install } from './vitamin-install'
@@ -26,7 +27,7 @@ export interface RuntimeCoreOptions {
 export class RuntimeCore {
   private evaluator: Evaluator
   private options: RuntimeCoreOptions
-  private loader: ModuleLoader
+  private transpiler: Transpiler
   private nextSpawnPid = 1
 
   constructor(options: RuntimeCoreOptions) {
@@ -55,9 +56,14 @@ export class RuntimeCore {
     })
     this.evaluator = evaluator
     const coreModules = createCoreModules(options.vfs, evaluator.runtime, this)
+    this.transpiler = new Transpiler({
+      target: ts.ScriptTarget.ESNext,
+      module: ts.ModuleKind.ESNext,
+      prefix: options.env?.VITAMIN_MODULE_PREFIX,
+    })
     this.loader = new ModuleLoader({
       vfs: options.vfs,
-      transpiler: new Transpiler(),
+      transpiler: this.transpiler,
       runtime: {
         Vitamin: evaluator.runtime.Vitamin,
         process: evaluator.runtime.process,
@@ -65,6 +71,10 @@ export class RuntimeCore {
       },
       coreModules,
     })
+  }
+
+  async compile(source: string, loader: string, fileName?: string) {
+    return this.transpiler.compile(source, loader as any, fileName)
   }
 
   async exec(command: string, args: string[]): Promise<number> {

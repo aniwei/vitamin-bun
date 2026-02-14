@@ -97,7 +97,12 @@ export abstract class Channel<T extends MessagePortLike = MessagePortLike> exten
     return this.#port 
   }
   set port(port: ChannelPort<T>) {
+    this.#port?.dispose()
     this.#port = port
+    if (port) {
+      port.on('message', (data) => this.emit('message', data))
+      port.on('error', (err) => this.emit('error', err))
+    }
   }
 
   #state: ChannelState = ChannelState.Initializing
@@ -116,9 +121,6 @@ export abstract class Channel<T extends MessagePortLike = MessagePortLike> exten
     super()
 
     this.#channel = new MessageChannel()
-    
-    this.#channel.port1.__port1__ = true
-    this.#channel.port2.__port2__ = true
     this.port = new ChannelPort(this.channel.port1 as unknown as T)
   }
 
@@ -136,7 +138,7 @@ export abstract class Channel<T extends MessagePortLike = MessagePortLike> exten
   }
 }
 
-export abstract class MainChannel extends Channel<MessagePortLike> {
+export abstract class WorkerChannel extends Channel<MessagePortLike> {
   #name: string
   get name() {
     return this.#name
@@ -148,7 +150,7 @@ export abstract class MainChannel extends Channel<MessagePortLike> {
   constructor(name: string, scriptUrl: string | URL) {
     super()
     
-    const prefix = `vitamin-`
+    const prefix = `vitamin`
     this.#name = `${prefix}-${name}`
 
     const worker = new Worker(scriptUrl, { 
@@ -213,7 +215,7 @@ export abstract class MainChannel extends Channel<MessagePortLike> {
   }
 }
 
-export class WorkerChannel extends Channel<MessagePortLike> {
+export class WorkerChannelPort extends ChannelPort<MessagePortLike> {
   #name: string = ''
   get name() {
     return this.#name
@@ -229,7 +231,7 @@ export class WorkerChannel extends Channel<MessagePortLike> {
       const data = event.data as IncomingMessage 
       if (data.type === 'init') {
         this.#name = data.name
-        this.port.messagePort = data.messagePort
+        this.messagePort = data.messagePort
 
         self.postMessage({
           type: 'ready',

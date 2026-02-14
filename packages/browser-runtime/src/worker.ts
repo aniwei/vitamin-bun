@@ -1,7 +1,7 @@
 import invariant from 'invariant'
 import { RuntimeCore } from '@vitamin-ai/vitamin-runtime'
 import { VirtualFileSystem, InodeKind } from '@vitamin-ai/virtual-fs'
-import { bytesToBase64, base64ToBytes, WorkerChannel } from '@vitamin-ai/shared'
+import { bytesToBase64, base64ToBytes, WorkerChannelPort, encoder } from '@vitamin-ai/shared'
 import { IncomingMessage, VfsSnapshot } from './types'
 
 declare const self: DedicatedWorkerGlobalScope
@@ -22,7 +22,7 @@ function walkVfs(fs: VirtualFileSystem, dir: string, out: Record<string, string>
   }
 }
 
-class Runner extends WorkerChannel {
+class Runner extends WorkerChannelPort {
   #runtime: RuntimeCore | null = null
   get runtime() {
     if (!this.#runtime) {
@@ -39,9 +39,6 @@ class Runner extends WorkerChannel {
 
   constructor() {
     super()
-
-    debugger
-
     this.on('message', this.onMessage.bind(this))
   }
 
@@ -55,7 +52,7 @@ class Runner extends WorkerChannel {
   }
 
   private exit(id: number, code: number): void {
-    this.post({ type: 'exit', id, code })
+    this.post({ type: 'event', id, payload: { name: 'exit', code } })
   }
 
   private throwError(message: string): void {
@@ -67,12 +64,12 @@ class Runner extends WorkerChannel {
     this.exit(id, 1)
   }
 
-  private async exec(id: number, command: string, args: string[]): Promise<void> {
+  private async exec(pid: number, command: string, args: string[]): Promise<void> {
     try {
       const exitCode = await this.runtime.exec(command, args)
-      this.exit(id, exitCode)
+      this.exit(pid, exitCode)
     } catch (err) {
-      this.exitWithError(id, `Failed to execute command, details: ${err instanceof Error ? err.message : String(err)}`)
+      this.exitWithError(pid, `Failed to execute command, details: ${err instanceof Error ? err.message : String(err)}`)
     }
   }
 
@@ -83,9 +80,12 @@ class Runner extends WorkerChannel {
   private async processVfsRequest(id: number, filename: string): Promise<void> {
     try {
       if (this.vfs.exists(filename)) {
-        this.post({ type: 'vfs:response', id, stream: true })
-        this.post({ type: 'vfs:chunk', id, chunk: this.vfs?.readFile(filename) })
-        this.post({ type: 'vfs:end', id })
+        const content = this.vfs.readFile(filename)
+        const compiled = await this.runtime.compile(content, 'js', filename)
+
+        this.post({ type: 'response', id, stream: true })
+        this.post({ type: 'stream:chunk', id, chunk: encoder.encode(compiled.code) })
+        this.post({ type: 'stream:end', id })
       } else {
         this.throwError(`File not found: ${filename}`)
       }
@@ -197,6 +197,7 @@ class Runner extends WorkerChannel {
           HOME: '/',
           PATH: '/usr/local/bin:/usr/bin:/bin',
           TERM: 'xterm-256color',
+          VITAMIN_MODULE_PREFIX: env?.VITAMIN_MODULE_PREFIX ?? `/@/${this.name}/vfs/`,
           ...(env ?? {}),
         },
         onStdout: (data: Uint8Array) => this.post({ 
@@ -216,8 +217,6 @@ class Runner extends WorkerChannel {
           payload: { name: 'serve:unregister', port }
         }),
       })
-
-      self.postMessage({ type: 'ready' })
     } catch (err) {
       this.throwError(`Failed to create runtime core, details: ${err instanceof Error ? err.message : String(err)}`)
     }
@@ -293,8 +292,6 @@ class Runner extends WorkerChannel {
 
   private processVfsRestore(id: number, snapshot: VfsSnapshot): void {
     try {
-      const encoder = new TextEncoder()
-
       for (const [path, content] of Object.entries(snapshot)) {
         this.writeVfs(path, encoder.encode(content))
       }
@@ -307,19 +304,22 @@ class Runner extends WorkerChannel {
 
   private async onMessage(event: unknown): Promise<void> {
     const msg = event as IncomingMessage
-    
+
     switch (msg.type) {
       case 'start':
         await this.start(msg.files, msg.env, msg.sab)
         break
       case 'exec':
-        await this.exec(msg.id, msg.command, msg.args)
+        await this.exec(msg.pid, msg.command, msg.args)
         break
       case 'kill':
         await this.kill(msg.id)
         break
       case 'serve:request':
         await this.processServeRequest(msg.id, msg.url, msg.method, msg.headers, msg.body)
+        break
+      case 'vfs:read':
+        await this.processVfsRequest(msg.id, msg.filename)
         break
       case 'vfs:request':
         await this.processVfsRequest(msg.id, msg.filename)

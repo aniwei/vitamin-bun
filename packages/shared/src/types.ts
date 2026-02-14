@@ -30,6 +30,7 @@ export interface StartMessage {
 export interface ExecMessage { 
   type: 'exec'
   id: number
+  pid: number
   command: string
   args: string[]
 }
@@ -51,6 +52,13 @@ export interface VfsWriteMessage {
   path: string
   content: string | Uint8Array
 }
+
+export interface VfsReadMessage {
+  type: 'vfs:read'
+  id: number
+  filename: string
+}
+
 
 export interface VfsMkdirMessage {
   type: 'vfs:mkdir'
@@ -98,6 +106,7 @@ export type IncomingMessage =
   | ExecMessage
   | ServeRequestMessage
   | VfsRequestMessage
+  | VfsReadMessage
   | VfsDumpMessage
   | VfsRestoreMessage
   | VfsWriteMessage
@@ -145,6 +154,7 @@ export interface StderrPayload {
 
 export interface ExitPayload {
   name: 'exit'
+  pid: number
   code: number
 }
 
@@ -183,6 +193,12 @@ export interface ServeUnregisterPayload {
   port: number
 }
 
+export type ResponsePayload = {
+  status: number
+  headers: Record<string, string>
+  body?: Uint8Array | string
+}
+
 export type MessagePayload = 
   | StdoutPayload 
   | StderrPayload 
@@ -197,16 +213,17 @@ export type MessagePayload =
 export interface ResponseMessage { 
   type: 'response'
   id: number 
-  payload: { 
+  stream: boolean
+  payload?: { 
     status: number
     headers: Record<string, string>
     body: Uint8Array | null
-  }  
+  } 
 }
 
 export type EventMessage = { 
   type: 'event' 
-  payload: MessagePayload
+  payload: MessagePayload | ResponsePayload
   forward?: boolean 
 }
 
