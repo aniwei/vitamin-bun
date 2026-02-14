@@ -1,10 +1,10 @@
 import invariant from 'invariant'
-import { MessagePortLike, MixinPendingTask, WorkerChannel } from '@vitamin-ai/shared'
+import { MessagePortLike, MixinPendingTask, ChannelPort } from '@vitamin-ai/shared'
 import { ServeForward, VfsForward } from './nat'
 
 
 
-export class Channel extends MixinPendingTask(WorkerChannel<MessagePortLike> as any) {
+export class Channel extends MixinPendingTask(ChannelPort<MessagePortLike> as any) {
   #ports: number[] = []
   get ports() {
     return this.#ports

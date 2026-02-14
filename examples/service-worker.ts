@@ -1,1 +1,1 @@
-import '../packages/network-proxy/src/vitamin-service-worker'
+import '../packages/network-proxy/src/service-worker'

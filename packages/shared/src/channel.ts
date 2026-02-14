@@ -116,6 +116,9 @@ export abstract class Channel<T extends MessagePortLike = MessagePortLike> exten
     super()
 
     this.#channel = new MessageChannel()
+    
+    this.#channel.port1.__port1__ = true
+    this.#channel.port2.__port2__ = true
     this.port = new ChannelPort(this.channel.port1 as unknown as T)
   }
 
@@ -147,6 +150,7 @@ export abstract class MainChannel extends Channel<MessagePortLike> {
     
     const prefix = `vitamin-`
     this.#name = `${prefix}-${name}`
+
     const worker = new Worker(scriptUrl, { 
       type: 'module', 
       name: this.#name,

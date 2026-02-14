@@ -1,10 +1,9 @@
 import React from 'react'
-import { createVitaminContainer } from '@vitamin-ai/sdk'
-import { WorkerMain } from '@vitamin-ai/shared'
+import { MainChannel } from '@vitamin-ai/shared'
 import { ExampleRunner } from '../components/ExampleRunner'
 
 
-class WorkerExample extends WorkerMain {
+class WorkerExample extends MainChannel {
   constructor() {
     super('share-worker', new URL('./WorkerRunnerExample.ts', import.meta.url))
   }

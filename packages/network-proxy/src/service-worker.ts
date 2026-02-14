@@ -18,27 +18,32 @@ class NetworkProxy extends SimpleEmitter {
   }
 }
 
-
-const network = new NetworkProxy()
 class App extends Router {
   #channelManager = new ChannelManager()
   get channels() {
     return this.#channelManager.channels
   }
 
+  #network = new NetworkProxy()
+  get network() {
+    return this.#network
+  }
+
   constructor() {
     super()
 
-    network.on('install', () => {
+    
+
+    this.#network.on('install', () => {
       (self as unknown as ServiceWorkerGlobalScope).skipWaiting()
     })
 
-    network.on('activate', (event) => {
+    this.#network.on('activate', (event) => {
       const sw = self as unknown as ServiceWorkerGlobalScope
       ;(event as ExtendableEvent).waitUntil(sw.clients.claim())
     })
 
-    network.on('message', (data) => {
+    this.#network.on('message', (data) => {
       // TODO: use a better message format
       const msg = data as { type: string, name?: string, port: number, messagePort: MessagePort }
 
@@ -60,7 +65,7 @@ class App extends Router {
       } 
     })
 
-    network.on('fetch', (event) => {
+    this.#network.on('fetch', (event) => {
       const fetchEvent = event as FetchEvent
       const context = new Context<App>({ 
         app: this,

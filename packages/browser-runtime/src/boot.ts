@@ -37,7 +37,7 @@ export class BootService extends MixinPendingTask(MainChannel as any) implements
 
     const scriptUrl = workerUrl
       ? new URL(workerUrl)
-      : new URL('./runner.ts', import.meta.url)
+      : new URL('./worker.ts', import.meta.url)
 
     super(name, scriptUrl)
 
@@ -240,15 +240,15 @@ export class BootService extends MixinPendingTask(MainChannel as any) implements
       this.#sabBridge = new SABBridge()
     }
 
+    await super.start()
     this.post({
       type: 'start',
       files,
       env: this.options.env,
       sab: this.sabBridge
-    })
+    })    
 
     await this.register()
-    await super.start()
   }
 
   dispose(): void {

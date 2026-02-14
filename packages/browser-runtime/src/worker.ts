@@ -40,6 +40,8 @@ class Runner extends WorkerChannel {
   constructor() {
     super()
 
+    debugger
+
     this.on('message', this.onMessage.bind(this))
   }
 
@@ -305,7 +307,7 @@ class Runner extends WorkerChannel {
 
   private async onMessage(event: unknown): Promise<void> {
     const msg = event as IncomingMessage
-
+    
     switch (msg.type) {
       case 'start':
         await this.start(msg.files, msg.env, msg.sab)
