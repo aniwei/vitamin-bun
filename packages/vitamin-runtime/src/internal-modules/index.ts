@@ -35,16 +35,16 @@ import { createUtilModule } from './util'
 import { createWorkerThreadsModule } from './worker-threads'
 import { createZlibModule } from './zlib'
 import type { VirtualFileSystem } from '@vitamin-ai/virtual-fs'
-import type { BunRuntime } from '../vitamin-runtime'
+import type { VitaminRuntime } from '../vitamin-runtime'
 import type { RuntimeCore } from '../runtime-core'
 
-export type CoreModuleMap = Record<string, unknown>
+export type InternalModules = Record<string, unknown>
 
-export function createCoreModules(
+export function createInternalModules(
   vfs: VirtualFileSystem,
-  runtime: BunRuntime,
+  runtime: VitaminRuntime,
   runtimeCore?: RuntimeCore,
-): CoreModuleMap {
+): InternalModules {
   const fs = createFsModule(vfs)
   const fsPromises = createFsPromisesModule(vfs)
   const timers = createTimersModule()

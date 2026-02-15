@@ -3,6 +3,7 @@ import { RuntimeCore } from '@vitamin-ai/vitamin-runtime'
 import { VirtualFileSystem, InodeKind } from '@vitamin-ai/virtual-fs'
 import { bytesToBase64, base64ToBytes, WorkerChannelPort, encoder } from '@vitamin-ai/shared'
 import { IncomingMessage, VfsSnapshot } from './types'
+import { ModuleSourceLoader } from './module-source-loader'
 
 declare const self: DedicatedWorkerGlobalScope
 
@@ -35,6 +36,12 @@ class Runner extends WorkerChannelPort {
   get vfs() {
     invariant(this.#vfs, 'VFS is not initialized')
     return this.#vfs
+  }
+
+  #moduleSourceLoader: ModuleSourceLoader | null = null
+  get moduleSourceLoader() {
+    invariant(this.#moduleSourceLoader, 'Module source loader is not initialized')
+    return this.#moduleSourceLoader
   }
 
   constructor() {
@@ -81,7 +88,7 @@ class Runner extends WorkerChannelPort {
     try {
       if (this.vfs.exists(filename)) {
         const content = this.vfs.readFile(filename)
-        const compiled = await this.runtime.compile(content, 'js', filename)
+        const compiled = await this.runtime.compile(content, this.guessLoader(filename), filename)
 
         this.post({ type: 'response', id, stream: true })
         this.post({ type: 'stream:chunk', id, chunk: encoder.encode(compiled.code) })
@@ -92,6 +99,27 @@ class Runner extends WorkerChannelPort {
     } catch (err) {
       this.throwError(`Failed to handle VFS request, details: ${err instanceof Error ? err.message : String(err)}`)
     }
+  }
+
+  private async processModuleRequest(id: number, moduleId: string, parent?: string): Promise<void> {
+    try {
+      const loaded = await this.moduleSourceLoader.load(moduleId, parent)
+      this.post({ type: 'response', id, stream: true })
+      this.post({ type: 'stream:chunk', id, chunk: encoder.encode(loaded.code) })
+      this.post({ type: 'stream:end', id })
+    } catch (err) {
+      this.throwError(`Failed to handle module request, details: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+
+  private guessLoader(path: string): string {
+    if (path.endsWith('.ts')) return 'ts'
+    if (path.endsWith('.tsx')) return 'tsx'
+    if (path.endsWith('.jsx')) return 'jsx'
+    if (path.endsWith('.mjs')) return 'mjs'
+    if (path.endsWith('.cjs')) return 'cjs'
+    if (path.endsWith('.json')) return 'json'
+    return 'js'
   }
 
   private async processServeRequest(
@@ -197,7 +225,7 @@ class Runner extends WorkerChannelPort {
           HOME: '/',
           PATH: '/usr/local/bin:/usr/bin:/bin',
           TERM: 'xterm-256color',
-          VITAMIN_MODULE_PREFIX: env?.VITAMIN_MODULE_PREFIX ?? `/@/${this.name}/vfs/`,
+          VITAMIN_MODULE_PREFIX: env?.VITAMIN_MODULE_PREFIX ?? `/@/${this.name}/module/`,
           ...(env ?? {}),
         },
         onStdout: (data: Uint8Array) => this.post({ 
@@ -217,6 +245,7 @@ class Runner extends WorkerChannelPort {
           payload: { name: 'serve:unregister', port }
         }),
       })
+      this.#moduleSourceLoader = new ModuleSourceLoader(this.vfs, this.runtime)
     } catch (err) {
       this.throwError(`Failed to create runtime core, details: ${err instanceof Error ? err.message : String(err)}`)
     }
@@ -292,7 +321,8 @@ class Runner extends WorkerChannelPort {
 
   private processVfsRestore(id: number, snapshot: VfsSnapshot): void {
     try {
-      for (const [path, content] of Object.entries(snapshot)) {
+      const files = snapshot.files ?? {}
+      for (const [path, content] of Object.entries(files)) {
         this.writeVfs(path, encoder.encode(content))
       }
 
@@ -323,6 +353,9 @@ class Runner extends WorkerChannelPort {
         break
       case 'vfs:request':
         await this.processVfsRequest(msg.id, msg.filename)
+        break
+      case 'module:request':
+        await this.processModuleRequest(msg.id, msg.module, msg.parent)
         break
       case 'vfs:write':
         await this.processVfsWrite(msg.id, msg.path, msg.content)

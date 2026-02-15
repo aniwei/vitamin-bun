@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { VirtualFileSystem } from '../../../virtual-fs/src/index'
 import { createBunRuntime } from '../vitamin-runtime'
-import { createCoreModules } from '../core-modules/index'
+import { createCoreModules } from '../internal-modules/index'
 import { ModuleLoader } from '../module-loader'
 import { Transpiler } from '../transpiler'
 

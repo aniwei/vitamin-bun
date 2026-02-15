@@ -102,6 +102,28 @@ app.all('/@/:id/serve/*path', async (ctx, next) => {
   }
 })
 
+app.all('/@/:id/module/*module', async (ctx, next) => {
+  const id = ctx.params.id
+  const channel = app.channels.get(id)
+  if (channel) {
+    return channel.forwardTo({
+      type: 'module:request',
+      module: ctx.params.module,
+      parent: ctx.request.headers.get('referer') ?? undefined,
+    }).then((content: ResponsePayload) => {
+      const bytes = content.body instanceof Uint8Array
+        ? content.body
+        : encoder.encode(content.body || '')
+      const body = new Uint8Array(bytes).buffer
+
+      return new Response(body, {
+        status: content.status,
+        headers: content.headers
+      })
+    })
+  }
+})
+
 app.all('/@/:id/vfs/*path', async (ctx, next) => {
   const id = ctx.params.id
   const channel = app.channels.get(id)
@@ -111,9 +133,13 @@ app.all('/@/:id/vfs/*path', async (ctx, next) => {
       type: 'vfs:request',
       filename: ctx.params.path,
     }).then((content: ResponsePayload) => {
-      const body = content.body instanceof Uint8Array
+      const bytes = content.body instanceof Uint8Array
         ? content.body
         : encoder.encode(content.body || '')
+      const view = bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength
+        ? bytes
+        : bytes.slice()
+      const body = new Uint8Array(view).buffer
 
       return new Response(body, {
         status: content.status,

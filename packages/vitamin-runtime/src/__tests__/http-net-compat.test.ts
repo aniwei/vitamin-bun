@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import * as nodeHttp from 'node:http'
-import { createHttpModule } from '../core-modules/http'
-import { createNetModule } from '../core-modules/net'
-import { createTlsModule } from '../core-modules/tls'
+import { createHttpModule } from '../internal-modules/http'
+import { createNetModule } from '../internal-modules/net'
+import { createTlsModule } from '../internal-modules/tls'
 import { VirtualFileSystem } from '@vitamin-ai/virtual-fs'
 import { createBunRuntime } from '../vitamin-runtime'
 

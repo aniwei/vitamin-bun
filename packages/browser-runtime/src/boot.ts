@@ -111,6 +111,14 @@ export class BootService extends MixinPendingTask(WorkerChannel) implements Boot
     }
   }
 
+  async loadModule(module: string, parent?: string): Promise<any> {
+    return this.forwardTo<any>({
+      type: 'module:request',
+      module,
+      parent,
+    })
+  }
+
   async readFile(path: string, encoding?: string): Promise<string | Uint8Array> {
     return this.forwardTo<string | Uint8Array>({
       type: 'vfs:read',
@@ -198,6 +206,29 @@ export class BootService extends MixinPendingTask(WorkerChannel) implements Boot
     const msg = data as IncomingMessage
     switch (msg.type) {
       case 'serve:request': {
+        break
+      }
+
+      case 'module:request': {
+        this.loadModule((msg as any).module, (msg as any).parent).then(content => {
+          this.service.forwardTo({
+            id: msg.id,
+            type: 'response',
+            stream: false,
+            payload: {
+              status: 200,
+              headers: { 'Content-Type': 'application/javascript' },
+              body: content instanceof Uint8Array 
+                ? content 
+                : encoder.encode(content)
+            },
+          })
+        }).catch(err => {
+          this.service.forwardTo({
+            type: 'error',
+            message: err instanceof Error ? err.message : String(err)
+          })
+        })  
         break
       }
       case 'vfs:request':

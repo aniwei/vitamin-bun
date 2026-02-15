@@ -1,11 +1,11 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
 import { VirtualFileSystem } from '../../../virtual-fs/src/index'
 import { createBunRuntime } from '../vitamin-runtime'
-import { createCoreModules } from '../core-modules/index'
+import { createCoreModules } from '../internal-modules/index'
 import { ModuleLoader } from '../module-loader'
 import { Transpiler } from '../transpiler'
-import { createNetModule } from '../core-modules/net'
-import { createTlsModule } from '../core-modules/tls'
+import { createNetModule } from '../internal-modules/net'
+import { createTlsModule } from '../internal-modules/tls'
 
 type NetProxyEvent =
   | { type: 'net:connected'; socketId: number }

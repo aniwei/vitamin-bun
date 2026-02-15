@@ -1,7 +1,7 @@
 import { ModuleLoader } from './vitamin-module'
 import { createVitaminRuntime, type RuntimeEnv, type RuntimeHooks } from './vitamin-runtime'
 import { PluginManager, type RuntimePlugin } from './runtime-plugins'
-import { createCoreModules } from './core-modules/index'
+import { createInternalModules } from './internal-modules/index'
 import { Transpiler } from './transpiler'
 import type { VirtualFileSystem } from '@vitamin-ai/virtual-fs'
 
@@ -30,7 +30,7 @@ export class Evaluator {
     this.pluginManager = new PluginManager(options.vfs, envVars, { trace: options.pluginTrace })
     this.vitaminRuntime = createVitaminRuntime(options.vfs, options.env ?? {}, stdout, stderr, options.runtimeHooks, this.pluginManager)
     this.pluginManager.setRuntime(this.vitaminRuntime)
-    const coreModules = createCoreModules(options.vfs, this.vitaminRuntime)
+    const internalModules = createInternalModules(options.vfs, this.vitaminRuntime)
     this.loader = new ModuleLoader({
       vfs: options.vfs,
       transpiler: new Transpiler(),
@@ -39,7 +39,7 @@ export class Evaluator {
         process: this.vitaminRuntime.process,
         console: this.vitaminRuntime.console,
       },
-      coreModules,
+      internalModules,
       hooks: {
         onResolve: async (id, parent) => {
           const result = await this.pluginManager.runModuleResolve(id, parent)

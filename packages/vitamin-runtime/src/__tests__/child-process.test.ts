@@ -3,7 +3,7 @@ import { VirtualFileSystem } from '../../../virtual-fs/src/index'
 import { ModuleLoader } from '../module-loader'
 import { Transpiler } from '../transpiler'
 import { createBunRuntime } from '../vitamin-runtime'
-import { createCoreModules } from '../core-modules/index'
+import { createCoreModules } from '../internal-modules/index'
 
 function createLoader(vfs: VirtualFileSystem) {
   const polyfill = createBunRuntime(vfs, {}, () => {}, () => {})

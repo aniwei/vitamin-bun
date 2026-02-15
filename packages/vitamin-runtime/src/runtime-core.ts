@@ -1,6 +1,6 @@
 import * as ts from 'typescript'
 import { Evaluator } from './evaluator'
-import { createCoreModules } from './core-modules/index'
+import { createInternalModules } from './internal-modules/index'
 import { install } from './vitamin-install'
 import { parseAddArgs } from './vitamin-add/cli'
 import { runAddFlow } from './vitamin-add/add-flow'
@@ -28,6 +28,7 @@ export class RuntimeCore {
   private evaluator: Evaluator
   private options: RuntimeCoreOptions
   private transpiler: Transpiler
+  private loader: ModuleLoader
   private nextSpawnPid = 1
 
   constructor(options: RuntimeCoreOptions) {
@@ -55,7 +56,7 @@ export class RuntimeCore {
       pluginTrace: options.pluginTrace,
     })
     this.evaluator = evaluator
-    const coreModules = createCoreModules(options.vfs, evaluator.runtime, this)
+    const internalModules = createInternalModules(options.vfs, evaluator.runtime, this)
     this.transpiler = new Transpiler({
       target: ts.ScriptTarget.ESNext,
       module: ts.ModuleKind.ESNext,
@@ -69,7 +70,7 @@ export class RuntimeCore {
         process: evaluator.runtime.process,
         console: evaluator.runtime.console,
       },
-      coreModules,
+      internalModules,
     })
   }
 
@@ -378,6 +379,14 @@ export class RuntimeCore {
       const record = this.loadSync(id, fromPath)
       return record.exports
     }
+  }
+
+  async load(id: string, parent?: string): Promise<ModuleRecord> {
+    return await this.loader.load(id, parent)
+  }
+
+  loadSync(id: string, parent?: string): ModuleRecord {
+    return this.loader.loadSync(id, parent)
   }
 
 

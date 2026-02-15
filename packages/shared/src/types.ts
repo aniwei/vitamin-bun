@@ -10,6 +10,14 @@ export interface VfsRequestMessage {
   messagePort: MessagePort 
 }
 
+export interface ModuleRequestMessage {
+  type: 'module:request',
+  id: number,
+  module: string,
+  parent?: string,
+  messagePort: MessagePort
+}
+
 export interface ServeRequestMessage { 
   type: 'serve:request'
   id: number
@@ -105,6 +113,7 @@ export type IncomingMessage =
   | StartMessage
   | ExecMessage
   | ServeRequestMessage
+  | ModuleRequestMessage
   | VfsRequestMessage
   | VfsReadMessage
   | VfsDumpMessage
